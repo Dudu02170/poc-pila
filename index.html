@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#C81E1E">
+<title>Pila · Cada pila no lugar certo · AppJam Expoagas 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   PILA · sistema visual
+   vermelho  = estrutura, navegação, identidade
+   verde     = dinheiro a favor (dentro do orçamento, economia, item pego)
+   vinho     = erro — nunca sozinho: sempre com ícone e fundo próprio
+   amarelo   = localização física (gôndola)
+   Nada depende só de cor: todo estado tem ícone ou texto.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --verde:#0B7A43; --verde-esc:#065C32; --verde-cl:#E4F2EA; --verde-borda:#A9D6BE;
+  --vm:#C81E1E; --vm-esc:#9B1414; --vm-cl:#FDEBEB; --vm-borda:#F1C4C4;
+  --amarelo:#FFC61E; --amarelo-cl:#FFF6DB; --amarelo-esc:#6E4E00;
+  --alerta:#7A0C1A; --alerta-bg:#FBDDE0; --alerta-borda:#EFB6BD;
+  --tinta:#191614; --cinza:#645C58; --papel:#F8F6F4; --linha:#E4DDD8;
+  --r:12px; --r-p:8px;
+  --alvo:44px;            /* alvo mínimo de toque no modo casa */
+  --alvo-g:56px;          /* alvo no modo mercado (mão no carrinho) */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+/* overflow-x:clip em vez de hidden: "hidden" no body faz dele um contêiner de
+   rolagem e quebra o position:sticky das barras internas. "clip" corta sem isso. */
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:rgba(200,30,30,.14);
+  overscroll-behavior-y:none;overflow-x:clip}
+body{background:var(--papel);color:var(--tinta);
+  font:400 16px/1.5 "IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  overflow-x:clip;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:"Barlow Condensed",sans-serif;line-height:1.06;letter-spacing:-.005em}
+h1{font-size:clamp(27px,5.2vw,40px);font-weight:700}
+h2{font-size:25px;font-weight:700}
+h3{font-size:19px;font-weight:600}
+.wrap{max-width:1060px;margin:0 auto;padding:0 18px}
+.sub{color:var(--cinza);font-size:15px;max-width:64ch;margin-top:6px}
+.mini{font-size:13px;color:var(--cinza)}
+b,strong{font-weight:600}
+:focus-visible{outline:3px solid var(--amarelo);outline-offset:2px;border-radius:4px}
+
+/* ── botões ───────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--alvo);padding:12px 24px;border:none;border-radius:var(--r-p);
+  font:600 16px "IBM Plex Sans",sans-serif;cursor:pointer;text-align:center}
+.btn-p{background:var(--verde);color:#fff}
+.btn-p:hover:not(:disabled){background:var(--verde-esc)}
+.btn-v{background:var(--vm);color:#fff}
+.btn-v:hover:not(:disabled){background:var(--vm-esc)}
+.btn-o{background:#fff;color:var(--vm);border:1.5px solid var(--vm-borda)}
+.btn-o:hover:not(:disabled){background:var(--vm-cl);border-color:var(--vm)}
+.btn-n{background:#fff;color:var(--tinta);border:1.5px solid var(--linha)}
+.btn-n:hover:not(:disabled){border-color:var(--cinza)}
+.btn:disabled{background:#D8D2CE;color:#7C7470;border-color:#D8D2CE;cursor:not-allowed}
+.btn-bloco{width:100%}
+.btn-g{min-height:var(--alvo-g);font-size:17px;padding:14px 26px}
+.linha-btn{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+
+/* ── formulário ───────────────────────────────────────────── */
+.campo{margin-bottom:16px}
+.campo>label{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+.campo input{width:100%;font:500 16px "IBM Plex Sans",sans-serif;min-height:var(--alvo);
+  padding:12px 14px;border:1.5px solid var(--linha);border-radius:var(--r-p);
+  background:#fff;color:var(--tinta)}
+.campo input::placeholder{color:#9A918C}
+.campo input:focus{outline:3px solid var(--amarelo);outline-offset:1px;border-color:var(--vm)}
+.campo input.ruim{border-color:var(--alerta);background:#FFF8F9}
+.recado{font-size:13px;margin-top:6px;min-height:18px;color:var(--cinza);display:flex;gap:5px}
+.recado.erro{color:var(--alerta);font-weight:600}
+.recado.ok{color:var(--verde-esc);font-weight:600}
+.senha-caixa{position:relative}
+.senha-caixa input{padding-right:56px}
+.olho{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:46px;height:40px;
+  background:none;border:none;cursor:pointer;font-size:17px;color:var(--cinza);border-radius:6px}
+.olho:hover{background:var(--papel)}
+.forca{display:flex;gap:4px;margin-top:7px}
+.forca i{flex:1;height:5px;border-radius:99px;background:var(--linha)}
+.forca i.on1{background:var(--alerta)}.forca i.on2{background:#D97706}
+.forca i.on3{background:#65A30D}.forca i.on4{background:var(--verde)}
+
+/* pílulas de escolha */
+.pilulas{display:flex;gap:8px;flex-wrap:wrap}
+.pilulas button{background:#fff;border:1.5px solid var(--linha);color:var(--tinta);
+  font:500 15px "IBM Plex Sans",sans-serif;min-height:var(--alvo);padding:10px 18px;
+  border-radius:99px;cursor:pointer}
+.pilulas button:hover{border-color:var(--vm)}
+.pilulas button[aria-pressed=true]{background:var(--vm);border-color:var(--vm);color:#fff}
+.pilulas button[aria-pressed=true]::before{content:"✓ ";font-weight:700}
+
+/* ── topo ─────────────────────────────────────────────────── */
+.topo{background:var(--vm);color:#fff;position:sticky;top:0;z-index:60;
+  box-shadow:0 1px 0 rgba(0,0,0,.15);padding-top:env(safe-area-inset-top)}
+.topo[hidden]{display:none}
+.topo .wrap{display:flex;align-items:center;gap:14px;padding:9px 18px;flex-wrap:wrap}
+.logo{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:30px;
+  text-transform:uppercase;letter-spacing:.06em;line-height:1;
+  border-bottom:4px solid var(--amarelo);padding-bottom:1px}
+.troca{display:flex;background:rgba(0,0,0,.22);border-radius:99px;padding:3px;gap:2px;min-width:0}
+.troca .lb-c{display:none}   /* rótulo curto: só entra em tela muito estreita */
+.troca button{background:none;border:none;color:#F6D2D2;cursor:pointer;border-radius:99px;
+  display:inline-flex;align-items:center;gap:6px;
+  font:600 14px "IBM Plex Sans",sans-serif;padding:8px 15px;min-height:38px;white-space:nowrap}
+.troca button[aria-pressed=true]{background:#fff;color:var(--vm)}
+.troca button:not([aria-pressed=true]):hover{color:#fff}
+.eu{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:13px;color:#FCE8E8}
+.eu .av{width:32px;height:32px;border-radius:99px;background:var(--amarelo);color:var(--tinta);
+  display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.eu button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;
+  font:600 12px "IBM Plex Sans",sans-serif;padding:6px 10px;cursor:pointer;min-height:32px}
+.eu button:hover{background:rgba(255,255,255,.14)}
+
+/* trilha de etapas (só no modo casa).
+   O topo mede a própria altura e publica em --h-topo: sem isso as barras grudentas
+   se sobrepõem quando o cabeçalho quebra em duas linhas no celular. */
+.trilha{background:#fff;border-bottom:1px solid var(--linha);position:sticky;
+  top:var(--h-topo,52px);z-index:50}
+.trilha .wrap{display:flex;gap:4px;padding:0 18px;overflow-x:auto;scrollbar-width:none}
+.trilha .wrap::-webkit-scrollbar{display:none}
+.trilha button{flex:1 0 auto;background:none;border:none;cursor:pointer;padding:12px 12px 9px;
+  color:var(--cinza);font:600 14px "IBM Plex Sans",sans-serif;
+  border-bottom:3px solid transparent;white-space:nowrap;min-height:var(--alvo)}
+.trilha button[aria-current=step]{color:var(--vm);border-bottom-color:var(--vm)}
+.trilha button:disabled{opacity:.45;cursor:not-allowed}
+.trilha button:not(:disabled):hover{color:var(--tinta)}
+.trilha .cont{display:inline-block;background:var(--vm-cl);color:var(--vm-esc);border-radius:99px;
+  font-size:11.5px;padding:1px 7px;margin-left:5px;font-weight:700}
+
+/* ── telas ────────────────────────────────────────────────── */
+.tela{display:none}
+.tela.ativa{display:block}
+/* a folga só existe quando a barra fixa está na tela — senão sobra um vão morto */
+main{padding-bottom:32px}
+body.com-barra main{padding-bottom:150px}
+.bloco-tela{padding:26px 0 30px}
+.cabec{margin-bottom:20px}
+.cartao{background:#fff;border:1px solid var(--linha);border-radius:var(--r);padding:22px}
+
+/* ── login ────────────────────────────────────────────────── */
+#v-entrar.ativa{display:grid;grid-template-columns:1.05fr 1fr;min-height:100dvh}
+@media(max-width:940px){#v-entrar.ativa{grid-template-columns:1fr;min-height:0}}
+.vitrine{background:var(--vm);color:#fff;padding:52px 44px;display:flex;flex-direction:column;
+  justify-content:center;gap:26px;position:relative;overflow:hidden}
+.vitrine::after{content:"";position:absolute;inset:auto -60px -80px auto;width:320px;height:320px;
+  border-radius:50%;background:rgba(255,198,30,.16)}
+.vitrine .logo{font-size:56px;align-self:flex-start}
+.vitrine h1{font-size:clamp(30px,4vw,44px);max-width:15ch}
+.vitrine .lema{color:#FCE8E8;font-size:16px;max-width:40ch;line-height:1.55}
+.vitrine ul{list-style:none;display:grid;gap:13px;position:relative;z-index:1}
+.vitrine li{display:flex;gap:11px;align-items:flex-start;font-size:15px;line-height:1.45}
+.vitrine li i{flex:none;width:28px;height:28px;border-radius:8px;background:var(--amarelo);
+  color:var(--tinta);display:grid;place-items:center;font-style:normal;font-size:15px;font-weight:700}
+.vitrine .selo-evento{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#FCE8E8;
+  border-top:1px solid rgba(255,255,255,.25);padding-top:16px;line-height:1.6}
+@media(max-width:940px){
+  .vitrine{padding:26px 20px 30px;gap:16px}
+  .vitrine ul{display:none}
+  .vitrine .logo{font-size:40px}
+  .vitrine h1{font-size:26px}
+}
+.painel{display:flex;align-items:center;justify-content:center;padding:40px 22px}
+.painel .caixa{width:100%;max-width:412px}
+.abas-auth{display:flex;border-bottom:2px solid var(--linha);margin-bottom:24px}
+.abas-auth button{flex:1;background:none;border:none;cursor:pointer;padding:13px 8px;
+  font:600 16px "IBM Plex Sans",sans-serif;color:var(--cinza);
+  border-bottom:3px solid transparent;margin-bottom:-2px;min-height:var(--alvo)}
+.abas-auth button[aria-selected=true]{color:var(--vm);border-bottom-color:var(--vm)}
+.aba-corpo[hidden]{display:none}
+.entre-linhas{display:flex;align-items:center;gap:12px;color:var(--cinza);font-size:13px;margin:22px 0}
+.entre-linhas::before,.entre-linhas::after{content:"";flex:1;height:1px;background:var(--linha)}
+.link{background:none;border:none;color:var(--vm);font:600 13.5px "IBM Plex Sans",sans-serif;
+  cursor:pointer;text-decoration:underline;padding:6px 2px}
+.lembrar{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;user-select:none}
+/* flex:none — sem isso a caixa de marcar é espremida em telas estreitas (ficava com 13px) */
+.lembrar input{width:20px;height:20px;flex:none;accent-color:var(--vm);cursor:pointer}
+.entre-topo{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.aviso-caixa{background:var(--amarelo-cl);border:1px solid #F0DCA0;border-radius:var(--r-p);
+  padding:11px 13px;font-size:13px;line-height:1.5;margin-bottom:16px}
+
+/* ── escolha de local ─────────────────────────────────────── */
+.locais{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:16px;margin-top:8px}
+.local{background:#fff;border:2px solid var(--linha);border-radius:var(--r);padding:26px 22px;
+  text-align:left;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;gap:9px}
+.local:hover{border-color:var(--vm);box-shadow:0 6px 20px rgba(200,30,30,.09)}
+.local .ic{font-size:38px;line-height:1}
+.local h3{font-size:23px}
+.local p{font-size:14px;color:var(--cinza);line-height:1.5}
+.local .tag{margin-top:5px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--vm)}
+.local.travado{opacity:.6}
+.local.travado .tag{color:var(--cinza)}
+
+/* ── orçamento ────────────────────────────────────────────── */
+.orc-caixa{background:#fff;border:1px solid var(--linha);border-radius:var(--r);padding:22px;max-width:560px}
+.orc-caixa input{font:700 30px "Barlow Condensed",sans-serif;letter-spacing:.01em;
+  text-align:center;min-height:64px;padding:8px 12px}
+.dobra{border:1px solid var(--linha);border-radius:var(--r);background:#fff;margin-top:16px;overflow:hidden}
+.dobra>summary{cursor:pointer;padding:15px 18px;font-weight:600;font-size:15px;list-style:none;
+  display:flex;align-items:center;gap:9px;min-height:var(--alvo)}
+.dobra>summary::-webkit-details-marker{display:none}
+.dobra>summary::before{content:"▸";color:var(--vm);font-size:15px;transition:transform .15s}
+.dobra[open]>summary::before{transform:rotate(90deg)}
+.dobra .corpo{padding:4px 18px 20px;border-top:1px solid var(--linha)}
+.grupo-campo{margin-top:18px}
+.grupo-campo>.rot{display:block;font-size:14px;font-weight:600;margin-bottom:9px}
+.grupo-campo .obs{font-weight:400;color:var(--cinza);font-size:13px}
+
+/* ── previa da cesta ──────────────────────────────────────── */
+.previa{background:var(--verde-cl);border:1px solid var(--verde-borda);border-radius:var(--r);
+  padding:18px;margin-top:18px;display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+.previa .n{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:32px;line-height:1}
+.previa .r{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--verde-esc);font-weight:700}
+
+/* ── ajuste transparente ──────────────────────────────────── */
+.ajuste{border:1px solid var(--amarelo);background:var(--amarelo-cl);border-radius:var(--r);
+  padding:15px 17px;margin-bottom:16px}
+.ajuste h3{font-size:19px;margin-bottom:5px}
+.ajuste ul{list-style:none;margin:9px 0 0;display:grid;gap:5px;font-size:14px}
+.ajuste li{display:flex;gap:8px;align-items:flex-start;line-height:1.45}
+.ajuste li::before{content:"•";color:var(--amarelo-esc);font-weight:700}
+.erro-caixa{border:1px solid var(--alerta-borda);background:var(--alerta-bg);border-radius:var(--r);
+  padding:15px 17px;margin-bottom:16px;color:var(--alerta)}
+.erro-caixa h3{font-size:19px;margin-bottom:4px;display:flex;gap:8px;align-items:center}
+.erro-caixa p{font-size:14.5px;line-height:1.55;color:#5C121C}
+
+/* ── filtro / busca / abas ────────────────────────────────── */
+.filtro{background:var(--vm-cl);border:1px solid var(--vm-borda);border-radius:var(--r);
+  padding:14px 16px;margin-bottom:14px}
+.filtro .rot{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+  color:var(--vm-esc);margin-bottom:10px}
+.filtro .ops{display:flex;gap:8px;flex-wrap:wrap}
+.filtro .ops button{flex:1;min-width:132px;background:#fff;border:1.5px solid var(--vm-borda);
+  border-radius:var(--r-p);padding:11px 13px;cursor:pointer;text-align:left;font-family:inherit;
+  min-height:var(--alvo)}
+.filtro .ops button strong{display:block;font-size:15px;font-weight:600}
+.filtro .ops button span{display:block;font-size:12px;color:var(--cinza);margin-top:2px}
+.filtro .ops button[aria-pressed=true]{background:var(--vm);border-color:var(--vm)}
+.filtro .ops button[aria-pressed=true] strong{color:#fff}
+.filtro .ops button[aria-pressed=true] span{color:#F6CFCF}
+.busca{width:100%;font:500 16px "IBM Plex Sans",sans-serif;min-height:var(--alvo);
+  padding:12px 14px;border:1.5px solid var(--linha);border-radius:var(--r-p);margin-bottom:12px}
+.busca:focus{outline:3px solid var(--amarelo);outline-offset:1px;border-color:var(--vm)}
+.abas{display:flex;gap:7px;overflow-x:auto;padding-bottom:9px;margin-bottom:14px;scrollbar-width:thin}
+.abas button{flex:0 0 auto;background:#fff;border:1.5px solid var(--linha);border-radius:99px;
+  padding:9px 16px;font:500 14px "IBM Plex Sans",sans-serif;cursor:pointer;white-space:nowrap;
+  min-height:var(--alvo)}
+.abas button[aria-pressed=true]{background:var(--vm);border-color:var(--vm);color:#fff}
+
+/* ── corredor + item ──────────────────────────────────────── */
+.corredor{background:#fff;border:1px solid var(--linha);border-radius:var(--r);
+  overflow:hidden;margin-bottom:12px}
+.corredor>header{display:flex;align-items:center;gap:12px;padding:12px 15px;
+  background:var(--vm-cl);border-bottom:1px solid var(--vm-borda)}
+.numero{width:36px;height:36px;flex:none;border-radius:9px;background:var(--vm);color:#fff;
+  font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:21px;display:grid;place-items:center}
+.corredor>header h3{margin:0}
+.corredor>header .mini{margin-left:auto;text-align:right;line-height:1.3}
+
+.item{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:12px 15px;
+  border-bottom:1px solid var(--linha);align-items:center}
+.item:last-child{border-bottom:none}
+.item.escolhido{background:var(--verde-cl)}
+.item .nome{grid-column:1;min-width:0;font-size:15.5px;font-weight:600;line-height:1.28}
+.item .preco{grid-column:2;grid-row:1;font-family:"Barlow Condensed",sans-serif;font-weight:700;
+  font-size:22px;white-space:nowrap;text-align:right}
+.item .meta{grid-column:1;font-size:12.5px;color:var(--cinza);line-height:1.4;
+  display:flex;flex-wrap:wrap;align-items:center;gap:4px 7px}
+.item .passador{grid-column:2;grid-row:2;justify-self:end}
+.selos{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+/* em tela larga cabe tudo numa linha: nome+meta | preço | passador */
+@media(min-width:760px){
+  .item{grid-template-columns:1fr auto auto;column-gap:18px}
+  .item .nome{grid-column:1;grid-row:1}
+  .item .meta{grid-column:1;grid-row:2}
+  .item .preco{grid-column:2;grid-row:1/3;align-self:center}
+  .item .passador{grid-column:3;grid-row:1/3;align-self:center}
+  .selos{grid-column:1;grid-row:3}
+}
+.selo{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;padding:3px 8px;border-radius:99px;white-space:nowrap}
+.selo.essencial{background:var(--verde-cl);color:var(--verde-esc)}
+.selo.trocado{background:var(--amarelo-cl);color:var(--amarelo-esc)}
+.selo.novo{background:var(--vm-cl);color:var(--vm-esc)}
+.selo.eco{background:#EEEAE7;color:#5A524E}
+.gond{display:inline-block;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:14px;
+  background:var(--amarelo);color:var(--tinta);border-radius:5px;padding:1px 8px;
+  letter-spacing:.03em;white-space:nowrap}
+.kg{font-variant-numeric:tabular-nums}
+
+.passador{display:flex;align-items:center;gap:3px;flex:none}
+.passador button{width:var(--alvo);height:var(--alvo);border:1.5px solid var(--linha);background:#fff;
+  border-radius:var(--r-p);font-size:20px;line-height:1;cursor:pointer;color:var(--vm);
+  display:grid;place-items:center;font-weight:700}
+.passador button:hover{border-color:var(--vm);background:var(--vm-cl)}
+.passador .n{min-width:34px;text-align:center;font-family:"Barlow Condensed",sans-serif;
+  font-weight:700;font-size:21px}
+.passador .n.zero{color:#B6ADA8}
+.passador button.mais{background:var(--verde);border-color:var(--verde);color:#fff}
+.passador button.mais:hover{background:var(--verde-esc)}
+
+/* ── receitas ─────────────────────────────────────────────── */
+.receitas{display:grid;grid-template-columns:repeat(auto-fill,minmax(244px,1fr));gap:12px}
+/* o cartão é um <button>, então os filhos são <span> — todos precisam de display:block,
+   senão a barra de progresso vira um bloco inline sem altura (era o defeito da barrinha) */
+.receita{background:#fff;border:1.5px solid var(--linha);border-radius:var(--r);padding:15px 16px;
+  cursor:pointer;text-align:left;font-family:inherit;display:flex;flex-direction:column;
+  align-items:stretch;gap:0;width:100%}
+.receita:hover{border-color:var(--vm)}
+.receita:active{background:var(--papel)}
+.receita>span{display:block}
+.receita .tipo{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--vm)}
+.receita .tit{font-family:"Barlow Condensed",sans-serif;font-size:21px;font-weight:600;margin:4px 0 5px;
+  line-height:1.1}
+.receita .dados{font-size:12.5px;color:var(--cinza)}
+.receita .trilho{display:block;height:8px;width:100%;background:var(--linha);border-radius:99px;
+  margin-top:11px;overflow:hidden;position:relative}
+.receita .trilho i{display:block;height:8px;background:var(--verde);border-radius:99px;
+  transition:width .25s}
+.receita .pron{font-size:12.5px;font-weight:600;color:var(--verde-esc);margin-top:7px}
+.receita .rodape-cart{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;
+  margin-top:9px;padding-top:9px;border-top:1px solid var(--linha)}
+.receita .valor{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:23px;line-height:1}
+.receita .valor small{display:block;font:500 11.5px "IBM Plex Sans",sans-serif;color:var(--cinza);
+  margin-top:3px;letter-spacing:0}
+.receita .abrir{font-size:13px;font-weight:600;color:var(--vm);white-space:nowrap}
+
+/* ── detalhe da receita ───────────────────────────────────── */
+.voltar-rec{margin-bottom:16px}
+.grupo-ing{border:1px solid var(--linha);border-radius:var(--r);overflow:hidden;margin-bottom:14px;
+  background:#fff}
+.grupo-ing>header{display:flex;align-items:center;gap:10px;padding:13px 15px;flex-wrap:wrap}
+.grupo-ing>header h3{font-size:20px}
+.grupo-ing>header .cont{margin-left:auto;font-family:"Barlow Condensed",sans-serif;font-weight:700;
+  font-size:21px;white-space:nowrap}
+.grupo-ing.falta>header{background:var(--vm-cl);border-bottom:1px solid var(--vm-borda);color:var(--vm-esc)}
+.grupo-ing.tem>header{background:var(--verde-cl);border-bottom:1px solid var(--verde-borda);color:var(--verde-esc)}
+.grupo-ing>header .ic{width:30px;height:30px;border-radius:99px;display:grid;place-items:center;
+  font-size:16px;flex:none;color:#fff}
+.grupo-ing.falta>header .ic{background:var(--vm)}
+.grupo-ing.tem>header .ic{background:var(--verde)}
+.usa{font-weight:700;color:var(--tinta);background:var(--amarelo-cl);border:1px solid #F0DCA0;
+  border-radius:5px;padding:1px 7px;white-space:nowrap}
+.receita-tipo{display:inline-block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  font-weight:700;color:var(--vm);margin-bottom:4px}
+.tudo-pronto{background:var(--verde-cl);border:1px solid var(--verde-borda);border-radius:var(--r);
+  padding:15px 17px;margin-bottom:18px;display:flex;gap:11px;align-items:center}
+.tudo-pronto .ic{width:34px;height:34px;flex:none;border-radius:99px;background:var(--verde);
+  color:#fff;display:grid;place-items:center;font-size:18px}
+.tudo-pronto b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:20px}
+.tudo-pronto span{font-size:13.5px;color:var(--verde-esc)}
+.resumo{display:flex;gap:20px;flex-wrap:wrap;background:#fff;border:1px solid var(--linha);
+  border-radius:var(--r);padding:15px 18px;margin-bottom:14px}
+.resumo .r{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--cinza);font-weight:700}
+.resumo .v{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:26px;line-height:1.15}
+
+/* ── mapa da loja ─────────────────────────────────────────── */
+.mapa{background:#fff;border:1px solid var(--linha);border-radius:var(--r);padding:18px;margin-bottom:16px}
+/* min-width:0 nos filhos: sem isso um nome comprido ("Frios e laticínios") impede
+   a coluna de encolher e a metade direita do mapa sai da tela em aparelhos de 320px */
+.planta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:480px}
+.planta>*{min-width:0}
+.vaga .t{min-width:0;overflow-wrap:break-word;hyphens:auto}
+.porta{grid-column:1/-1;background:var(--tinta);color:#fff;border-radius:var(--r-p);padding:9px;
+  text-align:center;font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+.vaga{background:#F2EFED;border:1.5px solid var(--linha);border-radius:var(--r-p);
+  padding:9px 11px;display:flex;align-items:center;gap:9px;min-height:52px}
+.vaga .n{width:27px;height:27px;flex:none;border-radius:7px;background:#C6BDB8;color:#fff;
+  font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:16px;display:grid;place-items:center}
+.vaga .t{font-size:12.5px;color:#544C48;line-height:1.25}
+.vaga.on{background:var(--vm-cl);border-color:var(--vm)}
+.vaga.on .n{background:var(--vm)}
+.vaga.on .t{color:var(--tinta);font-weight:600}
+.vaga .c{margin-left:auto;background:var(--amarelo);color:var(--tinta);border-radius:99px;
+  font-size:12px;font-weight:700;padding:2px 9px}
+
+/* ═══ MODO MERCADO ═══════════════════════════════════════════ */
+.merc-topo{position:sticky;top:var(--h-topo,52px);z-index:45;background:#fff;
+  border-bottom:1px solid var(--linha);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.merc-topo .wrap{padding:11px 18px}
+.merc-linha{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.merc-linha .g{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:25px;line-height:1}
+.merc-linha .p{font-size:13.5px;color:var(--cinza)}
+.merc-trilho{height:9px;background:var(--linha);border-radius:99px;overflow:hidden;margin-top:9px}
+.merc-trilho i{display:block;height:100%;background:var(--verde);transition:width .3s}
+
+.corredor-atual{background:#fff;border:2px solid var(--vm);border-radius:var(--r);
+  overflow:hidden;margin-bottom:14px}
+.corredor-atual>header{background:var(--vm);color:#fff;padding:15px 17px;display:flex;
+  align-items:center;gap:14px}
+.corredor-atual>header .numero{background:#fff;color:var(--vm);width:46px;height:46px;font-size:26px}
+.corredor-atual>header h2{font-size:24px;line-height:1.05}
+.corredor-atual>header .d{font-size:13px;color:#FCE8E8;margin-top:2px}
+.corredor-atual>header .cnt{margin-left:auto;text-align:right;font-size:12.5px;color:#FCE8E8;
+  line-height:1.35;white-space:nowrap}
+
+.pegar{display:flex;align-items:center;gap:11px;padding:12px 12px;border-bottom:1px solid var(--linha);
+  width:100%;background:none;border-left:none;border-right:none;border-top:none;
+  text-align:left;font-family:inherit;cursor:pointer;min-height:78px}
+.pegar:last-of-type{border-bottom:none}
+.pegar:hover{background:var(--papel)}
+.marca-cx{width:var(--alvo-g);height:var(--alvo-g);flex:none;border:2.5px solid var(--linha);
+  border-radius:14px;display:grid;place-items:center;font-size:27px;color:transparent;background:#fff}
+.pegar .txt{flex:1;min-width:0}
+.pegar .txt .n{font-size:17px;font-weight:600;line-height:1.22;display:block}
+.pegar .txt .m{font-size:12.5px;color:var(--cinza);margin-top:4px;display:flex;flex-wrap:wrap;
+  gap:4px 7px;align-items:center}
+.pegar .dir{flex:none;text-align:right;line-height:1.1}
+.pegar .vl{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:22px;
+  white-space:nowrap;display:block}
+.pegar .qt{font-size:13px;font-weight:600;color:var(--cinza);white-space:nowrap;
+  display:block;margin-top:3px}
+.pegar[data-estado=pego]{background:var(--verde-cl)}
+.pegar[data-estado=pego] .marca-cx{background:var(--verde);border-color:var(--verde);color:#fff}
+.pegar[data-estado=pego] .txt .n{text-decoration:line-through;color:var(--verde-esc)}
+.pegar[data-estado=faltou]{background:#F4F1EF}
+.pegar[data-estado=faltou] .marca-cx{background:#EDE7E4;border-color:#CFC6C1;color:var(--alerta);font-size:22px}
+.pegar[data-estado=faltou] .txt .n{text-decoration:line-through;color:var(--cinza)}
+.pegar[data-estado=faltou] .vl{color:var(--cinza);text-decoration:line-through}
+.pegar-linha{display:flex;align-items:stretch;border-bottom:1px solid var(--linha)}
+.pegar-linha:last-child{border-bottom:none}
+.pegar-linha .pegar{border-bottom:none}
+.pegar-linha .acao-item{align-self:center;margin-right:10px}
+.acao-item{flex:none;width:var(--alvo);height:var(--alvo);border-radius:var(--r-p);border:1.5px solid var(--linha);
+  background:#fff;cursor:pointer;font-size:17px;color:var(--cinza);display:grid;place-items:center}
+.acao-item:hover{border-color:var(--alerta);color:var(--alerta);background:var(--alerta-bg)}
+.nav-corr{display:flex;gap:10px;margin:16px 0 6px}
+.nav-corr .btn{flex:1}
+.tira-corr{display:flex;gap:7px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:thin}
+.tira-corr button{flex:0 0 auto;min-width:52px;min-height:52px;border-radius:12px;cursor:pointer;
+  border:1.5px solid var(--linha);background:#fff;font-family:"Barlow Condensed",sans-serif;
+  font-weight:700;font-size:20px;color:var(--cinza);position:relative}
+.tira-corr button[aria-current=true]{border-color:var(--vm);background:var(--vm);color:#fff}
+.tira-corr button.pronto{border-color:var(--verde);background:var(--verde-cl);color:var(--verde-esc)}
+.tira-corr button.pronto::after{content:"✓";position:absolute;top:-5px;right:-4px;background:var(--verde);
+  color:#fff;font-size:11px;width:19px;height:19px;border-radius:99px;display:grid;place-items:center;
+  font-family:"IBM Plex Sans",sans-serif}
+
+/* ── barra fixa ───────────────────────────────────────────── */
+.rodape-fixo{position:fixed;left:0;right:0;bottom:0;z-index:55;transform:translateY(105%);
+  transition:transform .22s}
+.rodape-fixo.visivel{transform:none}
+.gaveta{background:#fff;border-top:1px solid var(--linha);max-height:min(48vh,360px);
+  overflow-y:auto;display:none}
+.gaveta.aberta{display:block}
+.gaveta .wrap{padding:12px 18px}
+.gaveta .l{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--linha);
+  font-size:14px}
+.gaveta .l:last-child{border:none}
+.gaveta .l .nm{flex:1;min-width:0}
+.gaveta .l .nm b{display:block;font-weight:600}
+.gaveta .l .nm span{font-size:12px;color:var(--cinza)}
+.gaveta .l .pr{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:19px}
+.gaveta .l .x{background:none;border:1px solid var(--linha);color:var(--cinza);font-size:18px;
+  cursor:pointer;border-radius:8px;width:var(--alvo);height:var(--alvo);flex:none}
+.gaveta .l .x:hover{color:var(--alerta);background:var(--alerta-bg);border-color:var(--alerta-borda)}
+.barra{background:var(--tinta);color:#fff;padding-bottom:env(safe-area-inset-bottom)}
+.barra .wrap{display:flex;align-items:center;gap:16px;padding:11px 18px;flex-wrap:wrap}
+.bloco .r{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#B4A9A3;font-weight:700}
+.bloco .v{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:25px;line-height:1.1}
+.medidor{flex:1;min-width:120px}
+.medidor .r{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#B4A9A3;font-weight:700}
+.trilho{height:9px;background:#3A3330;border-radius:99px;overflow:hidden;margin-top:6px}
+.trilho i{display:block;height:100%;background:var(--verde);transition:width .25s,background .25s}
+.barra.estourou .trilho i{background:var(--amarelo)}
+.barra .v.neg{color:var(--amarelo)}
+.barra .acoes{margin-left:auto;display:flex;gap:8px;align-items:center}
+.barra .verc{background:none;border:1.5px solid #4E4642;color:#fff;border-radius:var(--r-p);
+  font:600 14px "IBM Plex Sans",sans-serif;cursor:pointer;padding:10px 16px;min-height:var(--alvo)}
+.barra .verc:hover{border-color:var(--amarelo)}
+@media(max-width:700px){
+  .barra .medidor{order:5;flex-basis:100%}
+  .barra .acoes{margin-left:0;flex-basis:100%;order:6}
+  .barra .acoes button{flex:1}
+  .barra .wrap{gap:12px}
+}
+
+/* ── pagamento ────────────────────────────────────────────── */
+.pgto{display:grid;grid-template-columns:310px 1fr;gap:20px;align-items:start}
+@media(max-width:780px){.pgto{grid-template-columns:1fr}}
+.bilhete{background:#fff;border:1px solid var(--linha);border-radius:var(--r);padding:22px;
+  text-align:center;position:relative;overflow:hidden}
+.bilhete::before{content:"";position:absolute;top:0;left:0;right:0;height:6px;
+  background:linear-gradient(90deg,var(--vm) 33%,var(--amarelo) 33% 66%,var(--verde) 66%)}
+.bilhete .qr{margin:15px auto 12px;line-height:0}
+.bilhete .qr svg{max-width:100%;height:auto;border-radius:6px}
+.bilhete .cod{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:28px;letter-spacing:.09em}
+.bilhete .val{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:42px;
+  line-height:1.05;margin-top:8px}
+.bilhete .exp{font-size:12.5px;color:var(--cinza);margin-top:10px;border-top:1px dashed var(--linha);
+  padding-top:11px;line-height:1.5}
+.linhas{list-style:none}
+.linhas li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;
+  border-bottom:1px solid var(--linha);font-size:14.5px}
+.linhas li:last-child{border:none}
+.linhas li.tot{border-top:2px solid var(--tinta);margin-top:4px;padding-top:12px;font-size:17px}
+.linhas li.tot b{font-family:"Barlow Condensed",sans-serif;font-size:25px}
+
+/* ── rodapé ───────────────────────────────────────────────── */
+.rodape{background:var(--tinta);color:#B7ACA6;padding:30px 0;font-size:13px;margin-top:10px}
+.rodape .wrap{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+@media(max-width:700px){.rodape .wrap{grid-template-columns:1fr}}
+.rodape h3{color:var(--amarelo);font:700 11px "IBM Plex Sans",sans-serif;letter-spacing:.13em;
+  text-transform:uppercase;margin-bottom:11px}
+.rodape ul{list-style:none}
+.rodape li{padding:6px 0;border-bottom:1px solid #332C29;line-height:1.45}
+.rodape li:last-child{border:none}
+.rodape li b{color:#fff;display:block;font-weight:600}
+.rodape p{line-height:1.65;margin-bottom:9px}
+.vazio{background:#fff;border:1px dashed var(--linha);border-radius:var(--r);padding:30px 22px;
+  text-align:center}
+.vazio p{color:var(--cinza);font-size:15px;margin-bottom:16px;line-height:1.55}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ═══════════════════════════════════════════════════════════════
+   CELULAR — o alvo principal do app.
+   Cabeçalho de uma linha só, barra inferior enxuta, menos rolagem.
+   ═══════════════════════════════════════════════════════════════ */
+@media(max-width:640px){
+  .wrap{padding:0 14px}
+  .bloco-tela{padding:20px 0 24px}
+  h1{font-size:clamp(25px,7vw,32px)}
+  .cabec{margin-bottom:16px}
+  .cartao{padding:17px}
+
+  /* topo em uma linha só: logo + troca de modo + avatar */
+  .topo .wrap{padding:8px 14px;gap:8px;flex-wrap:nowrap}
+  .logo{font-size:23px;border-bottom-width:3px;flex:none}
+  .troca{padding:2px;flex:none;margin-left:auto}
+  .troca button{padding:8px 13px;font-size:13.5px;min-height:40px}
+  .eu{gap:6px;margin-left:0;flex:none}
+  .eu #euNome{display:none}
+  .eu .av{width:34px;height:34px;font-size:14px}
+  .eu button{padding:0;width:38px;height:38px;min-height:38px;font-size:0;position:relative}
+  .eu button::after{content:"⏻";font-size:16px;line-height:38px}
+
+  .trilha button{padding:11px 10px 8px;font-size:13.5px}
+
+  /* filtro de marca: três linhas cheias em vez de duas apertadas */
+  .filtro{padding:12px 13px}
+  .filtro .ops{flex-direction:column;gap:7px}
+  .filtro .ops button{width:100%;min-width:0;display:flex;align-items:baseline;
+    gap:7px;flex-wrap:wrap;padding:11px 13px}
+  .filtro .ops button strong{display:inline;font-size:15px}
+  .filtro .ops button span{display:inline;margin-top:0;font-size:12.5px}
+
+  .item{padding:11px 13px}
+  .item .nome{font-size:15px}
+  .selos{margin-top:1px}
+  .selo{font-size:9.5px;padding:2px 7px}
+  .corredor>header{padding:11px 13px}
+
+  /* barra inferior: sem o bloco de itens (a trilha já mostra), fontes menores */
+  .barra .wrap{padding:9px 14px;gap:9px}
+  .barra .bloco:nth-of-type(2){display:none}
+  .bloco .v{font-size:22px}
+  .bloco .r{font-size:9.5px}
+  .medidor .r{font-size:10px}
+  .trilho{height:7px;margin-top:5px}
+  .barra .acoes{gap:7px}
+  .barra .acoes button{min-height:46px;padding:11px 12px;font-size:15px}
+  .barra .verc{padding:11px 12px}
+  body.com-barra main{padding-bottom:172px}
+
+  /* receitas: cartão único por linha, mais respiro */
+  .receitas{grid-template-columns:1fr;gap:10px}
+  .grupo-ing>header{padding:12px 13px}
+  .grupo-ing>header h3{font-size:18px}
+
+  .pgto{gap:14px}
+  .bilhete{padding:18px 14px}
+  .bilhete .val{font-size:36px}
+  .resumo{gap:14px;padding:13px 15px}
+  .resumo .v{font-size:23px}
+}
+/* aparelhos de 320–400px (iPhone SE, Androids antigos): o cabeçalho não cabe com
+   "Em casa"/"No mercado" por extenso — troca pelos rótulos curtos */
+@media(max-width:400px){
+  .troca button{padding:7px 10px;font-size:12.5px;gap:4px}
+  .troca .lb-l{display:none}
+  .troca .lb-c{display:inline}
+  .logo{font-size:21px}
+  .topo .wrap{gap:6px;padding:8px 12px}
+  .wrap{padding:0 12px}
+  .corredor>header{gap:9px}
+  .corredor>header>div{min-width:0}
+  /* linha de "pegar" apertada: sem isso o botão ✕ sai da tela */
+  .pegar{padding:11px 8px;gap:9px;min-height:70px}
+  .marca-cx{width:50px;height:50px;border-radius:12px;font-size:24px}
+  .pegar .txt .n{font-size:16px}
+  .pegar .vl{font-size:20px}
+  .pegar-linha .acao-item{width:38px;height:38px;margin-right:7px;font-size:15px}
+  .corredor-atual>header{padding:13px 12px;gap:10px}
+  .corredor-atual>header .numero{width:40px;height:40px;font-size:22px}
+  .corredor-atual>header h2{font-size:20px}
+  .mapa{padding:14px 12px}
+  .vaga{padding:8px 9px;gap:7px}
+  .vaga .t{font-size:11.5px;line-height:1.2}
+  .vaga .n{width:24px;height:24px;font-size:14px}
+  .vaga .c{font-size:11px;padding:2px 7px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ═══ TOPO ═══ -->
+<header class="topo" id="topo" hidden>
+  <div class="wrap">
+    <div class="logo">Pila</div>
+    <div class="troca" id="troca" role="group" aria-label="Onde você está">
+      <button data-modo="casa" aria-pressed="true" aria-label="Modo em casa"><span
+        aria-hidden="true">🏠</span><span class="lb-l" aria-hidden="true">Em casa</span><span
+        class="lb-c" aria-hidden="true">Casa</span></button>
+      <button data-modo="mercado" aria-pressed="false" aria-label="Modo no mercado"><span
+        aria-hidden="true">🛒</span><span class="lb-l" aria-hidden="true">No mercado</span><span
+        class="lb-c" aria-hidden="true">Mercado</span></button>
+    </div>
+    <div class="eu">
+      <span class="av" id="avatar" aria-hidden="true">?</span>
+      <span id="euNome"></span>
+      <button id="sair">Sair</button>
+    </div>
+  </div>
+</header>
+
+<nav class="trilha" id="trilha" hidden aria-label="Etapas do planejamento">
+  <div class="wrap" id="trilhaWrap"></div>
+</nav>
+
+<main>
+
+<!-- ═══════════ ENTRAR / CRIAR CONTA ═══════════ -->
+<section class="tela" id="v-entrar">
+  <div class="vitrine">
+    <div class="logo">Pila</div>
+    <div>
+      <h1>Cada pila no lugar certo.</h1>
+      <p class="lema">Você planeja a compra em casa, com calma. Na loja, só anda e confere —
+        o Pila diz o corredor, a gôndola e quanto já foi.</p>
+    </div>
+    <ul>
+      <li><i>1</i><span><b>Em casa:</b> diga quanto quer gastar e receba a cesta montada, dentro do orçamento.</span></li>
+      <li><i>2</i><span><b>No mercado:</b> lista na ordem dos corredores, um toque pra marcar o que pegou.</span></li>
+      <li><i>3</i><span><b>No caixa:</b> um QR code fecha a compra sem passar item por item.</span></li>
+    </ul>
+    <div class="selo-evento">AppJam · Expoagas 2026<br>43ª Convenção Gaúcha de Supermercados</div>
+  </div>
+
+  <div class="painel">
+    <div class="caixa">
+      <div class="abas-auth" role="tablist">
+        <button role="tab" id="abaEntrar" aria-selected="true" aria-controls="formEntrar">Entrar</button>
+        <button role="tab" id="abaCriar" aria-selected="false" aria-controls="formCriar">Criar conta</button>
+      </div>
+
+      <!-- entrar -->
+      <form class="aba-corpo" id="formEntrar" role="tabpanel" aria-labelledby="abaEntrar" novalidate>
+        <h2 style="margin-bottom:4px">Bem-vindo de volta</h2>
+        <p class="sub" style="margin:0 0 20px">Sua lista e seu orçamento ficam salvos neste aparelho.</p>
+        <div class="campo">
+          <label for="eEmail">E-mail</label>
+          <input id="eEmail" type="email" autocomplete="username" placeholder="voce@email.com">
+        </div>
+        <div class="campo">
+          <label for="eSenha">Senha</label>
+          <div class="senha-caixa">
+            <input id="eSenha" type="password" autocomplete="current-password" placeholder="Sua senha">
+            <button type="button" class="olho" data-olho="eSenha" aria-label="Mostrar senha">👁</button>
+          </div>
+        </div>
+        <div class="entre-topo">
+          <label class="lembrar"><input type="checkbox" id="lembrar" checked> Continuar conectado</label>
+          <button type="button" class="link" id="esqueci">Esqueci minha senha</button>
+        </div>
+        <p class="recado" id="recEntrar" role="alert"></p>
+        <button type="submit" class="btn btn-v btn-bloco" id="btEntrar">Entrar</button>
+        <div class="entre-linhas">ou</div>
+        <button type="button" class="btn btn-n btn-bloco" id="btVisitante">Continuar sem conta</button>
+        <p class="mini" style="margin-top:10px;text-align:center">Você pode criar a conta depois, sem perder a lista.</p>
+      </form>
+
+      <!-- criar conta -->
+      <form class="aba-corpo" id="formCriar" role="tabpanel" aria-labelledby="abaCriar" hidden novalidate>
+        <h2 style="margin-bottom:4px">Criar sua conta</h2>
+        <p class="sub" style="margin:0 0 20px">Leva 20 segundos. Não pedimos CPF nem dados de pagamento.</p>
+        <div class="campo">
+          <label for="cNome">Nome</label>
+          <input id="cNome" type="text" autocomplete="name" placeholder="Como podemos te chamar">
+          <p class="recado" id="recNome"></p>
+        </div>
+        <div class="campo">
+          <label for="cEmail">E-mail</label>
+          <input id="cEmail" type="email" autocomplete="email" placeholder="voce@email.com">
+          <p class="recado" id="recEmail"></p>
+        </div>
+        <div class="campo">
+          <label for="cSenha">Senha</label>
+          <div class="senha-caixa">
+            <input id="cSenha" type="password" autocomplete="new-password" placeholder="Mínimo de 6 caracteres">
+            <button type="button" class="olho" data-olho="cSenha" aria-label="Mostrar senha">👁</button>
+          </div>
+          <div class="forca" id="forca" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <p class="recado" id="recSenha"></p>
+        </div>
+        <div class="campo">
+          <label for="cSenha2">Repetir a senha</label>
+          <div class="senha-caixa">
+            <input id="cSenha2" type="password" autocomplete="new-password" placeholder="Digite de novo">
+            <button type="button" class="olho" data-olho="cSenha2" aria-label="Mostrar senha">👁</button>
+          </div>
+          <p class="recado" id="recSenha2"></p>
+        </div>
+        <div class="campo">
+          <label>Quantas pessoas moram na casa?</label>
+          <div class="pilulas" data-guarda="pessoas">
+            <button type="button" data-v="1">1</button><button type="button" data-v="2">2</button>
+            <button type="button" data-v="3">3</button><button type="button" data-v="4">4</button>
+            <button type="button" data-v="5">5</button><button type="button" data-v="6">6+</button>
+          </div>
+        </div>
+        <label class="lembrar" style="margin-bottom:16px;align-items:flex-start">
+          <input type="checkbox" id="cAceite" style="margin-top:2px">
+          <span style="font-size:13.5px;line-height:1.45">Li e aceito os termos de uso e a política de
+            privacidade deste protótipo acadêmico.</span>
+        </label>
+        <p class="recado" id="recCriar" role="alert"></p>
+        <button type="submit" class="btn btn-v btn-bloco" id="btCriar">Criar conta</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ ONDE VOCÊ ESTÁ ═══════════ -->
+<section class="tela" id="v-onde">
+  <div class="wrap bloco-tela">
+    <div class="cabec">
+      <h1 id="saudacao">Onde você está agora?</h1>
+      <p class="sub">O Pila muda de cara conforme o momento. Em casa você planeja sentado.
+        No mercado, a tela vira uma lista grande de marcar com o polegar.</p>
+    </div>
+    <div class="locais">
+      <button class="local" data-vai="casa">
+        <span class="ic" aria-hidden="true">🏠</span>
+        <h3>Estou em casa</h3>
+        <p>Definir o orçamento, montar a cesta, ver receitas e ajustar tudo com calma.</p>
+        <span class="tag" id="tagCasa">Planejar a compra</span>
+      </button>
+      <button class="local" data-vai="mercado" id="localMercado">
+        <span class="ic" aria-hidden="true">🛒</span>
+        <h3>Estou no mercado</h3>
+        <p>Lista na ordem dos corredores, alvos grandes pra marcar o que pegou e o QR do caixa.</p>
+        <span class="tag" id="tagMercado">Comprar</span>
+      </button>
+    </div>
+    <p class="mini" style="margin-top:18px">Dá pra trocar de modo a qualquer momento, lá em cima.</p>
+  </div>
+</section>
+
+<!-- ═══════════ CASA · PLANO ═══════════ -->
+<section class="tela" id="v-plano">
+  <div class="wrap bloco-tela">
+    <div class="cabec">
+      <h1>Quanto você quer gastar?</h1>
+      <p class="sub">Só isso. Com uma resposta o Pila já monta a cesta inteira — e você ajusta
+        o que quiser depois, com a cesta na tela.</p>
+    </div>
+    <div class="orc-caixa">
+      <div class="campo">
+        <label for="orc" class="sr">Valor do orçamento</label>
+        <input id="orc" type="text" inputmode="numeric" placeholder="R$ 0,00" aria-describedby="recOrc">
+        <p class="recado" id="recOrc" role="status"></p>
+      </div>
+      <div class="pilulas" data-guarda="orcAtalho">
+        <button data-v="250">R$ 250</button><button data-v="400">R$ 400</button>
+        <button data-v="600">R$ 600</button><button data-v="900">R$ 900</button>
+        <button data-v="1300">R$ 1.300</button>
+      </div>
+      <div id="previaPlano"></div>
+      <div class="linha-btn">
+        <button class="btn btn-p" id="btMontar" disabled>Montar minha cesta</button>
+      </div>
+    </div>
+
+    <details class="dobra" id="dobraPerfil" style="max-width:560px">
+      <summary>Ajustar o perfil da casa <span class="mini" id="perfilResumo"></span></summary>
+      <div class="corpo">
+        <div class="grupo-campo">
+          <span class="rot">Quantas pessoas moram na casa?</span>
+          <div class="pilulas" data-guarda="pessoas">
+            <button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button>
+            <button data-v="4">4</button><button data-v="5">5</button><button data-v="6">6+</button>
+          </div>
+        </div>
+        <div class="grupo-campo">
+          <span class="rot">Essa compra tem que durar quanto tempo?</span>
+          <div class="pilulas" data-guarda="dias">
+            <button data-v="7">1 semana</button><button data-v="15">15 dias</button>
+            <button data-v="30">1 mês</button>
+          </div>
+        </div>
+        <div class="grupo-campo">
+          <span class="rot">Restrição alimentar na casa? <span class="obs">(pode marcar mais de uma)</span></span>
+          <div class="pilulas" data-guarda="restricoes" data-multi="1">
+            <button data-v="lactose">Sem lactose</button><button data-v="gluten">Sem glúten</button>
+            <button data-v="carne">Sem carne</button><button data-v="acucar">Menos açúcar</button>
+          </div>
+        </div>
+        <div class="grupo-campo">
+          <span class="rot">O que não pode faltar? <span class="obs">(pode marcar mais de uma)</span></span>
+          <div class="pilulas" data-guarda="extras" data-multi="1">
+            <button data-v="cafe">Café</button><button data-v="queijo">Queijo</button>
+            <button data-v="frango">Frango</button><button data-v="linguica">Linguiça</button>
+            <button data-v="iogurte">Iogurte</button><button data-v="biscoito">Biscoito</button>
+            <button data-v="refri">Refrigerante</button><button data-v="fralda">Fralda</button>
+            <button data-v="shampoo">Shampoo</button><button data-v="maca">Fruta extra</button>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ═══════════ CASA · CESTA ═══════════ -->
+<section class="tela" id="v-cesta">
+  <div class="wrap bloco-tela">
+    <div class="cabec">
+      <h1>Sua cesta</h1>
+      <p class="sub" id="subCesta"></p>
+    </div>
+    <div id="painelAjuste"></div>
+    <div class="filtro">
+      <div class="rot">Como escolher a marca de cada produto</div>
+      <div class="ops" data-guarda="filtro">
+        <button data-v="barato"><strong>Mais baratos</strong><span>menor preço de cada item</span></button>
+        <button data-v="vendido"><strong>Mais vendidos</strong><span>o que a loja mais vende</span></button>
+        <button data-v="caro"><strong>Mais caros</strong><span>linha premium</span></button>
+      </div>
+    </div>
+    <input class="busca" id="busca" type="search" placeholder="Buscar produto — arroz, café, sabão…"
+           aria-label="Buscar produto">
+    <div class="abas" id="abas"></div>
+    <div id="catalogo"></div>
+  </div>
+</section>
+
+<!-- ═══════════ CASA · RECEITAS ═══════════ -->
+<section class="tela" id="v-receitas">
+  <div class="wrap bloco-tela">
+    <div class="cabec">
+      <h1>O que dá pra cozinhar</h1>
+      <p class="sub">Ordenado pelo que já está na sua cesta. O custo é o dos ingredientes
+        que a receita consome — o que falta comprar aparece em pacotes inteiros, com preço e gôndola.</p>
+    </div>
+    <div class="pilulas" data-guarda="tipoRec" style="margin-bottom:16px">
+      <button data-v="todos">Todas</button><button data-v="Almoço">Almoço</button>
+      <button data-v="Jantar">Jantar</button><button data-v="Rápido">Rápido</button>
+      <button data-v="Doce">Doce</button>
+    </div>
+    <div class="receitas" id="listaReceitas"></div>
+  </div>
+</section>
+
+<!-- ═══════════ CASA · DETALHE DA RECEITA ═══════════ -->
+<section class="tela" id="v-receita">
+  <div class="wrap bloco-tela">
+    <button class="btn btn-n voltar-rec" data-rota="#/casa/receitas">← Todas as receitas</button>
+    <div id="detalheReceita"></div>
+  </div>
+</section>
+
+<!-- ═══════════ CASA · PRONTO ═══════════ -->
+<section class="tela" id="v-pronto">
+  <div class="wrap bloco-tela">
+    <div class="cabec">
+      <h1>Lista pronta</h1>
+      <p class="sub" id="subPronto"></p>
+    </div>
+    <div id="avisoPronto"></div>
+    <div class="mapa">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <h3 style="margin:0">Seu caminho na loja</h3><span class="mini" id="rotaMini"></span>
+      </div>
+      <div class="planta" id="planta"></div>
+    </div>
+    <div id="listaPronto"></div>
+    <div class="linha-btn">
+      <button class="btn btn-v btn-g" data-vai="mercado">🛒 Estou indo ao mercado</button>
+      <button class="btn btn-n" data-rota="#/casa/cesta">Mudar produtos</button>
+    </div>
+    <p class="mini" style="margin-top:14px">A lista fica salva neste aparelho. Pode fechar o site —
+      quando voltar, está tudo aqui.</p>
+  </div>
+</section>
+
+<!-- ═══════════ MERCADO · ROTA ═══════════ -->
+<section class="tela" id="v-rota">
+  <div class="merc-topo" id="mercTopo">
+    <div class="wrap">
+      <div class="merc-linha">
+        <span class="g" id="mercPegos">0 de 0</span>
+        <span class="p" id="mercValor"></span>
+      </div>
+      <div class="merc-trilho"><i id="mercBarra" style="width:0%"></i></div>
+    </div>
+  </div>
+  <div class="wrap bloco-tela" style="padding-top:16px">
+    <div id="rotaCorpo"></div>
+  </div>
+</section>
+
+<!-- ═══════════ MERCADO · PAGAR ═══════════ -->
+<section class="tela" id="v-pagar">
+  <div class="wrap bloco-tela">
+    <div class="cabec">
+      <h1>Pagamento</h1>
+      <p class="sub">Apresente este QR no caixa ou no totem. O código vale pelo que você
+        <b>realmente pegou</b> — o que ficou na prateleira não entra na conta.</p>
+    </div>
+    <div class="pgto">
+      <div class="bilhete" id="bilhete"></div>
+      <div>
+        <div class="cartao">
+          <h3 style="margin-bottom:12px">Resumo do pedido</h3>
+          <ul class="linhas" id="resumoPedido"></ul>
+        </div>
+        <div class="cartao" style="margin-top:14px">
+          <h3 style="margin-bottom:10px">Onde apresentar</h3>
+          <div class="pilulas" data-guarda="canal">
+            <button data-v="caixa">Caixa com operador</button>
+            <button data-v="totem">Totem de autoatendimento</button>
+          </div>
+          <p class="sub" id="explicaCanal" style="margin-top:12px"></p>
+        </div>
+        <div class="cartao" style="margin-top:14px">
+          <h3 style="margin-bottom:8px">Como isso funcionaria de verdade</h3>
+          <p class="sub" style="margin:0">O QR carrega só o número do pedido. O PDV consulta esse número
+            e recebe a lista e o valor do servidor da loja — o preço nunca viaja dentro do código,
+            então ninguém consegue forjar um QR mais barato.</p>
+        </div>
+        <div class="linha-btn">
+          <button class="btn btn-n" data-rota="#/mercado/rota">Voltar à lista</button>
+          <button class="btn btn-n" id="novaCompra">Começar nova compra</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- barra fixa -->
+<div class="rodape-fixo" id="rodapeFixo">
+  <div class="gaveta" id="gaveta"><div class="wrap" id="gavetaLista"></div></div>
+  <div class="barra" id="barra">
+    <div class="wrap">
+      <div class="bloco"><div class="r" id="bRotTotal">Total</div><div class="v" id="bTotal">R$ 0,00</div></div>
+      <div class="bloco"><div class="r">Itens</div><div class="v" id="bItens">0</div></div>
+      <div class="bloco"><div class="r" id="bRotSobra">Sobra</div><div class="v" id="bSobra">R$ 0,00</div></div>
+      <div class="medidor">
+        <div class="r" id="bRotulo">Dentro do orçamento</div>
+        <div class="trilho"><i id="bBarra" style="width:0%"></i></div>
+      </div>
+      <div class="acoes">
+        <button class="verc" id="verCarrinho">Ver carrinho</button>
+        <button class="btn btn-p" id="bSeguir">Continuar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="rodape">
+  <div class="wrap">
+    <div>
+      <h3>Equipe</h3>
+      <ul>
+        <li><b>Arthur Porcher</b></li>
+        <li><b>Eduardo Fernandes</b></li>
+        <li><b>Leonardo Rocha</b></li>
+        <li><b>Matheus Barreiro</b></li>
+        <li><b>Matheus Borges</b></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Sobre o protótipo</h3>
+      <p>O Pila separa a compra em dois momentos: <b>em casa</b>, onde você planeja sentado e define
+        o orçamento; e <b>no mercado</b>, onde a tela vira uma lista grande, na ordem dos corredores,
+        pra marcar com o polegar sem parar de andar.</p>
+      <p>Desenvolvido para a AppJam da 43ª Expoagas, Centro de Eventos da Fiergs, Porto Alegre.
+        Catálogo, preços e layout de loja são fictícios. Tudo funciona no próprio navegador:
+        o QR code é gerado localmente e a conta fica só neste aparelho — nada é enviado a servidor algum.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+const QR = (() => {
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  { let x = 1;
+    for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+    for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; }
+  const mul = (a, b) => (a && b) ? EXP[LOG[a] + LOG[b]] : 0;
+
+  /* [codewords de correção por bloco, blocos g1, dados g1, blocos g2, dados g2] */
+  const RS = { 1:[10,1,16,0,0], 2:[16,1,28,0,0], 3:[26,1,44,0,0], 4:[18,2,32,0,0],
+               5:[24,2,43,0,0], 6:[16,4,27,0,0], 7:[18,4,31,0,0], 8:[22,2,38,2,39],
+               9:[22,3,36,2,37], 10:[26,4,43,1,44] };
+  const ALIN = { 1:[], 2:[6,18], 3:[6,22], 4:[6,26], 5:[6,30], 6:[6,34],
+                 7:[6,22,38], 8:[6,24,42], 9:[6,26,46], 10:[6,28,50] };
+  const G15 = 0x537, G15M = 0x5412, G18 = 0x1f25;
+
+  const grau = n => { let d = 0; while (n !== 0) { d++; n >>>= 1; } return d; };
+  function bchFormato(d){ let v = d << 10;
+    while (grau(v) - grau(G15) >= 0) v ^= G15 << (grau(v) - grau(G15));
+    return ((d << 10) | v) ^ G15M; }
+  function bchVersao(d){ let v = d << 12;
+    while (grau(v) - grau(G18) >= 0) v ^= G18 << (grau(v) - grau(G18));
+    return (d << 12) | v; }
+
+  function gerador(n){ let g = [1];
+    for (let i = 0; i < n; i++){ const ng = new Array(g.length + 1).fill(0);
+      for (let j = 0; j < g.length; j++){ ng[j] ^= g[j]; ng[j+1] ^= mul(g[j], EXP[i]); }
+      g = ng; }
+    return g; }
+  function rs(dados, n){ const g = gerador(n), r = new Array(dados.length + n).fill(0);
+    dados.forEach((v, i) => r[i] = v);
+    for (let i = 0; i < dados.length; i++){ const c = r[i]; if (!c) continue;
+      for (let j = 0; j < g.length; j++) r[i+j] ^= mul(g[j], c); }
+    return r.slice(dados.length); }
+
+  const MASCARA = [
+    (i,j) => (i+j) % 2 === 0,           (i,j) => i % 2 === 0,
+    (i,j) => j % 3 === 0,               (i,j) => (i+j) % 3 === 0,
+    (i,j) => ((i>>1) + Math.floor(j/3)) % 2 === 0,
+    (i,j) => (i*j) % 2 + (i*j) % 3 === 0,
+    (i,j) => ((i*j) % 2 + (i*j) % 3) % 2 === 0,
+    (i,j) => ((i+j) % 2 + (i*j) % 3) % 2 === 0 ];
+
+  function bytes(txt){
+    if (typeof TextEncoder !== "undefined") return [...new TextEncoder().encode(txt)];
+    const o = []; for (const ch of unescape(encodeURIComponent(txt))) o.push(ch.charCodeAt(0));
+    return o; }
+
+  function montar(texto){
+    const dados = bytes(texto);
+    let v = 0;
+    for (let k = 1; k <= 10; k++){
+      const [ec, b1, d1, b2, d2] = RS[k];
+      const cap = b1 * d1 + b2 * d2;
+      const cabec = 4 + (k < 10 ? 8 : 16);
+      if (dados.length + Math.ceil(cabec / 8) <= cap) { v = k; break; }
+    }
+    if (!v) throw new Error("texto longo demais para o QR");
+
+    const [ec, b1, d1, b2, d2] = RS[v];
+    const capacidade = b1 * d1 + b2 * d2;
+    const bitsContador = v < 10 ? 8 : 16;
+
+    /* fluxo de bits */
+    const bits = [];
+    const push = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+    push(4, 4);                       // modo byte
+    push(dados.length, bitsContador);
+    dados.forEach(b => push(b, 8));
+    for (let i = 0; i < 4 && bits.length < capacidade * 8; i++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+    const cw = [];
+    for (let i = 0; i < bits.length; i += 8)
+      cw.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+    const enche = [0xEC, 0x11];
+    for (let i = 0; cw.length < capacidade; i++) cw.push(enche[i % 2]);
+
+    /* blocos + correção de erro */
+    const blocos = [], ecs = [];
+    let p = 0;
+    for (let i = 0; i < b1; i++){ const b = cw.slice(p, p + d1); p += d1; blocos.push(b); ecs.push(rs(b, ec)); }
+    for (let i = 0; i < b2; i++){ const b = cw.slice(p, p + d2); p += d2; blocos.push(b); ecs.push(rs(b, ec)); }
+
+    const fluxo = [];
+    const maxD = Math.max(d1, d2);
+    for (let i = 0; i < maxD; i++) blocos.forEach(b => { if (i < b.length) fluxo.push(b[i]); });
+    for (let i = 0; i < ec; i++) ecs.forEach(e => fluxo.push(e[i]));
+
+    /* matriz */
+    const n = 17 + 4 * v;
+    const nova = () => Array.from({length:n}, () => new Array(n).fill(null));
+
+    function base(m){
+      const olho = (r, c) => {
+        for (let i = -1; i <= 7; i++) for (let j = -1; j <= 7; j++){
+          const y = r + i, x = c + j;
+          if (y < 0 || y >= n || x < 0 || x >= n) continue;
+          m[y][x] = (i >= 0 && i <= 6 && (j === 0 || j === 6)) ||
+                    (j >= 0 && j <= 6 && (i === 0 || i === 6)) ||
+                    (i >= 2 && i <= 4 && j >= 2 && j <= 4);
+        } };
+      olho(0, 0); olho(n - 7, 0); olho(0, n - 7);
+      for (let i = 8; i < n - 8; i++){ m[i][6] = i % 2 === 0; m[6][i] = i % 2 === 0; }
+      const pos = ALIN[v], ult = pos.length - 1;
+      pos.forEach((r, ri) => pos.forEach((c, ci) => {
+        /* os três cantos coincidem com os olhos — só esses ficam de fora.
+           Os demais são desenhados por cima da linha de tempo, como manda a norma. */
+        if ((ri === 0 && ci === 0) || (ri === 0 && ci === ult) || (ri === ult && ci === 0)) return;
+        for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++)
+          m[r+i][c+j] = Math.max(Math.abs(i), Math.abs(j)) !== 1;
+      }));
+      if (v >= 7){
+        const b = bchVersao(v);
+        for (let i = 0; i < 18; i++){
+          const mod = ((b >> i) & 1) === 1;
+          m[Math.floor(i / 3)][i % 3 + n - 11] = mod;
+          m[i % 3 + n - 11][Math.floor(i / 3)] = mod;
+        }
+      }
+      for (let i = 0; i < 15; i++){          // reserva área do formato
+        if (i < 6) m[i][8] = m[i][8] ?? false;
+        else if (i < 8) m[i+1][8] = m[i+1][8] ?? false;
+        else m[n - 15 + i][8] = m[n - 15 + i][8] ?? false;
+        if (i < 8) m[8][n - i - 1] = m[8][n - i - 1] ?? false;
+        else if (i < 9) m[8][15 - i] = m[8][15 - i] ?? false;
+        else m[8][14 - i] = m[8][14 - i] ?? false;
+      }
+      m[n - 8][8] = true;
+    }
+
+    function dadosNaMatriz(m, mascara){
+      const f = MASCARA[mascara];
+      let linha = n - 1, inc = -1, bit = 7, byte = 0;
+      for (let col = n - 1; col > 0; col -= 2){
+        if (col === 6) col--;
+        for (;;){
+          for (let c = 0; c < 2; c++){
+            if (m[linha][col - c] === null){
+              let escuro = byte < fluxo.length && ((fluxo[byte] >>> bit) & 1) === 1;
+              if (f(linha, col - c)) escuro = !escuro;
+              m[linha][col - c] = escuro;
+              if (--bit === -1){ byte++; bit = 7; }
+            }
+          }
+          linha += inc;
+          if (linha < 0 || linha >= n){ linha -= inc; inc = -inc; break; }
+        }
+      }
+    }
+
+    function formato(m, mascara){
+      const b = bchFormato((0 << 3) | mascara);   // 0 = nível M
+      for (let i = 0; i < 15; i++){
+        const mod = ((b >> i) & 1) === 1;
+        if (i < 6) m[i][8] = mod; else if (i < 8) m[i+1][8] = mod; else m[n - 15 + i][8] = mod;
+        if (i < 8) m[8][n - i - 1] = mod; else if (i < 9) m[8][15 - i] = mod; else m[8][14 - i] = mod;
+      }
+      m[n - 8][8] = true;
+    }
+
+    function penalidade(m){
+      let p = 0;
+      for (let i = 0; i < n; i++){                       // 1 · sequências
+        for (const eixo of [0, 1]){
+          let cont = 1;
+          for (let j = 1; j < n; j++){
+            const a = eixo ? m[j-1][i] : m[i][j-1], b = eixo ? m[j][i] : m[i][j];
+            if (a === b) cont++; else { if (cont >= 5) p += cont - 2; cont = 1; }
+          }
+          if (cont >= 5) p += cont - 2;
+        }
+      }
+      for (let i = 0; i < n - 1; i++) for (let j = 0; j < n - 1; j++){ // 2 · blocos 2x2
+        const s = m[i][j] + m[i][j+1] + m[i+1][j] + m[i+1][j+1];
+        if (s === 0 || s === 4) p += 3;
+      }
+      const alvo = [1,0,1,1,1,0,1,0,0,0,0];              // 3 · padrão falso de olho
+      for (let i = 0; i < n; i++) for (let j = 0; j <= n - 11; j++){
+        let h = true, w = true;
+        for (let k = 0; k < 11; k++){
+          if (+m[i][j+k] !== alvo[k]) h = false;
+          if (+m[j+k][i] !== alvo[k]) w = false;
+        }
+        if (h) p += 40; if (w) p += 40;
+      }
+      let escuros = 0;                                    // 4 · proporção de escuros
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (m[i][j]) escuros++;
+      p += Math.floor(Math.abs(escuros * 100 / (n * n) - 50) / 5) * 10;
+      return p;
+    }
+
+    let melhor = null, melhorNota = Infinity;
+    for (let k = 0; k < 8; k++){
+      const m = nova();
+      base(m);
+      const reservado = m.map(l => l.map(x => x !== null));
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (!reservado[i][j]) m[i][j] = null;
+      dadosNaMatriz(m, k);
+      formato(m, k);
+      const nota = penalidade(m);
+      if (nota < melhorNota){ melhorNota = nota; melhor = m; }
+    }
+    return { matriz: melhor.map(l => l.map(Boolean)), tamanho: n, versao: v };
+  }
+
+  /* devolve um SVG pronto para inserir na página */
+  function svg(texto, lado = 260, margem = 4){
+    const { matriz, tamanho } = montar(texto);
+    const total = tamanho + margem * 2;
+    let d = "";
+    for (let i = 0; i < tamanho; i++) for (let j = 0; j < tamanho; j++)
+      if (matriz[i][j]) d += `M${j + margem} ${i + margem}h1v1h-1z`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" ` +
+           `width="${lado}" height="${lado}" shape-rendering="crispEdges" role="img" ` +
+           `aria-label="QR Code do pedido"><rect width="${total}" height="${total}" fill="#fff"/>` +
+           `<path d="${d}" fill="#12222E"/></svg>`;
+  }
+  return { montar, svg };
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   PILA v2 · cada pila no lugar certo
+   Dois modos: CASA (planejar) e MERCADO (comprar andando)
+   ══════════════════════════════════════════════════════════════ */
+const D = {"corredores":[{"n":1,"nome":"Hortifruti","desc":"Frutas, verduras e legumes"},{"n":2,"nome":"Padaria","desc":"Pães, bolos e frios da padaria"},{"n":3,"nome":"Açougue e peixaria","desc":"Carnes, aves e pescados"},{"n":4,"nome":"Frios e laticínios","desc":"Leite, queijo, iogurte e ovos"},{"n":5,"nome":"Mercearia salgada","desc":"Arroz, feijão, massas e óleo"},{"n":6,"nome":"Mercearia doce","desc":"Café, açúcar, farinha e biscoitos"},{"n":7,"nome":"Enlatados e molhos","desc":"Conservas, molhos e temperos"},{"n":8,"nome":"Bebidas","desc":"Sucos, refrigerantes e água"},{"n":9,"nome":"Congelados","desc":"Congelados e sorvetes"},{"n":10,"nome":"Higiene","desc":"Higiene pessoal"},{"n":11,"nome":"Limpeza","desc":"Produtos de limpeza"}],"grupos":[{"id":"banana","nome":"Banana","corredor":1,"un":"kg","essencial":1,"tags":[],"rende":4,"gond":"A1"},{"id":"tomate","nome":"Tomate","corredor":1,"un":"kg","essencial":1,"tags":[],"rende":4,"gond":"B1"},{"id":"batata","nome":"Batata","corredor":1,"un":"kg","essencial":1,"tags":[],"rende":2,"gond":"A2"},{"id":"cebola","nome":"Cebola","corredor":1,"un":"kg","essencial":1,"tags":[],"rende":6,"gond":"B2"},{"id":"alho","nome":"Alho","corredor":1,"un":"cabeça","essencial":1,"tags":[],"rende":10,"gond":"A3"},{"id":"cenoura","nome":"Cenoura","corredor":1,"un":"kg","essencial":0,"tags":[],"rende":4,"gond":"B3"},{"id":"alface","nome":"Alface","corredor":1,"un":"un","essencial":0,"tags":[],"rende":2,"gond":"A4"},{"id":"maca","nome":"Maçã","corredor":1,"un":"kg","essencial":0,"tags":[],"rende":4,"gond":"B4"},{"id":"laranja","nome":"Laranja","corredor":1,"un":"kg","essencial":0,"tags":[],"rende":3,"gond":"A5"},{"id":"couve","nome":"Couve","corredor":1,"un":"maço","essencial":0,"tags":[],"rende":2,"gond":"B5"},{"id":"pao_forma","nome":"Pão de forma","corredor":2,"un":"pct","essencial":1,"tags":["gluten"],"rende":3,"gond":"A1","base":[0.5,"kg"]},{"id":"pao_frances","nome":"Pão francês","corredor":2,"un":"kg","essencial":1,"tags":["gluten"],"rende":3,"gond":"B1"},{"id":"pao_sg","nome":"Pão sem glúten","corredor":2,"un":"pct","essencial":0,"tags":[],"rende":3,"gond":"A2","base":[0.4,"kg"]},{"id":"carne_moida","nome":"Carne moída","corredor":3,"un":"kg","essencial":1,"tags":["carne"],"rende":1.5,"gond":"A1"},{"id":"frango","nome":"Peito de frango","corredor":3,"un":"kg","essencial":1,"tags":["carne"],"rende":1.4,"gond":"B1"},{"id":"bife","nome":"Bife de alcatra","corredor":3,"un":"kg","essencial":0,"tags":["carne"],"rende":1.7,"gond":"A2"},{"id":"linguica","nome":"Linguiça","corredor":3,"un":"kg","essencial":0,"tags":["carne"],"rende":2.5,"gond":"B2"},{"id":"costela","nome":"Costela bovina","corredor":3,"un":"kg","essencial":0,"tags":["carne"],"rende":2,"gond":"A3"},{"id":"tilapia","nome":"Filé de tilápia","corredor":3,"un":"kg","essencial":0,"tags":["carne"],"rende":1.7,"gond":"B3"},{"id":"leite","nome":"Leite","corredor":4,"un":"L","essencial":1,"tags":["lactose"],"rende":3,"gond":"A1","base":[1,"L"]},{"id":"leite_zl","nome":"Leite zero lactose","corredor":4,"un":"L","essencial":0,"tags":[],"rende":3,"gond":"B1","base":[1,"L"]},{"id":"ovo","nome":"Ovos","corredor":4,"un":"dz","essencial":1,"tags":[],"rende":4,"gond":"A2","base":[12,"un"]},{"id":"margarina","nome":"Margarina","corredor":4,"un":"pote","essencial":1,"tags":["lactose"],"rende":20,"gond":"B2","base":[0.5,"kg"]},{"id":"queijo","nome":"Queijo mussarela","corredor":4,"un":"kg","essencial":0,"tags":["lactose"],"rende":8,"gond":"A3"},{"id":"queijo_zl","nome":"Queijo zero lactose","corredor":4,"un":"pct","essencial":0,"tags":[],"rende":4,"gond":"B3"},{"id":"requeijao","nome":"Requeijão","corredor":4,"un":"pote","essencial":0,"tags":["lactose"],"rende":6,"gond":"A4","base":[0.2,"kg"]},{"id":"iogurte","nome":"Iogurte","corredor":4,"un":"un","essencial":0,"tags":["lactose"],"rende":1,"gond":"B4","base":[0.17,"kg"]},{"id":"creme_leite","nome":"Creme de leite","corredor":4,"un":"cx","essencial":0,"tags":["lactose"],"rende":1,"gond":"A5","base":[0.2,"kg"]},{"id":"presunto","nome":"Presunto","corredor":4,"un":"kg","essencial":0,"tags":["carne"],"rende":8,"gond":"B5"},{"id":"arroz","nome":"Arroz branco","corredor":5,"un":"5kg","essencial":1,"tags":[],"rende":25,"gond":"A1","base":[5,"kg"]},{"id":"feijao","nome":"Feijão preto","corredor":5,"un":"kg","essencial":1,"tags":[],"rende":8,"gond":"B1","base":[1,"kg"]},{"id":"macarrao","nome":"Macarrão","corredor":5,"un":"pct","essencial":1,"tags":["gluten"],"rende":2,"gond":"A2","base":[0.5,"kg"]},{"id":"macarrao_sg","nome":"Macarrão de arroz","corredor":5,"un":"pct","essencial":0,"tags":[],"rende":2,"gond":"B2","base":[0.5,"kg"]},{"id":"oleo","nome":"Óleo de soja","corredor":5,"un":"900ml","essencial":1,"tags":[],"rende":30,"gond":"A3","base":[0.9,"L"]},{"id":"sal","nome":"Sal","corredor":5,"un":"kg","essencial":1,"tags":[],"rende":100,"gond":"B3","base":[1,"kg"]},{"id":"lentilha","nome":"Lentilha","corredor":5,"un":"pct","essencial":0,"tags":[],"rende":3,"gond":"A4","base":[0.5,"kg"]},{"id":"graobico","nome":"Grão-de-bico","corredor":5,"un":"pct","essencial":0,"tags":[],"rende":3,"gond":"B4","base":[0.5,"kg"]},{"id":"azeite","nome":"Azeite","corredor":5,"un":"500ml","essencial":0,"tags":[],"rende":30,"gond":"A5","base":[0.5,"L"]},{"id":"farinha_mand","nome":"Farinha de mandioca","corredor":5,"un":"pct","essencial":0,"tags":[],"rende":8,"gond":"B5","base":[0.5,"kg"]},{"id":"cafe","nome":"Café torrado","corredor":6,"un":"500g","essencial":1,"tags":[],"rende":25,"gond":"A1","base":[0.5,"kg"]},{"id":"acucar","nome":"Açúcar","corredor":6,"un":"kg","essencial":1,"tags":["acucar"],"rende":15,"gond":"B1","base":[1,"kg"]},{"id":"farinha","nome":"Farinha de trigo","corredor":6,"un":"kg","essencial":1,"tags":["gluten"],"rende":6,"gond":"A2","base":[1,"kg"]},{"id":"biscoito","nome":"Biscoito","corredor":6,"un":"pct","essencial":0,"tags":["gluten","acucar"],"rende":3,"gond":"B2","base":[0.4,"kg"]},{"id":"achocolatado","nome":"Achocolatado","corredor":6,"un":"pct","essencial":0,"tags":["acucar"],"rende":12,"gond":"A3","base":[0.4,"kg"]},{"id":"fermento","nome":"Fermento em pó","corredor":6,"un":"un","essencial":0,"tags":[],"rende":12,"gond":"B3"},{"id":"molho","nome":"Molho de tomate","corredor":7,"un":"un","essencial":1,"tags":[],"rende":1.5,"gond":"A1","base":[0.34,"kg"]},{"id":"milho","nome":"Milho em conserva","corredor":7,"un":"lata","essencial":0,"tags":[],"rende":1,"gond":"B1","base":[0.17,"kg"]},{"id":"ervilha","nome":"Ervilha em conserva","corredor":7,"un":"lata","essencial":0,"tags":[],"rende":1,"gond":"A2","base":[0.17,"kg"]},{"id":"atum","nome":"Atum em lata","corredor":7,"un":"lata","essencial":0,"tags":["carne"],"rende":1,"gond":"B2","base":[0.17,"kg"]},{"id":"mostarda","nome":"Mostarda","corredor":7,"un":"un","essencial":0,"tags":[],"rende":20,"gond":"A3"},{"id":"ketchup","nome":"Ketchup","corredor":7,"un":"un","essencial":0,"tags":["acucar"],"rende":15,"gond":"B3"},{"id":"suco","nome":"Suco de uva","corredor":8,"un":"L","essencial":0,"tags":["acucar"],"rende":3,"gond":"A1","base":[1,"L"]},{"id":"refri","nome":"Refrigerante","corredor":8,"un":"2L","essencial":0,"tags":["acucar"],"rende":4,"gond":"B1","base":[2,"L"]},{"id":"agua","nome":"Água mineral","corredor":8,"un":"5L","essencial":0,"tags":[],"rende":5,"gond":"A2","base":[5,"L"]},{"id":"batata_cong","nome":"Batata congelada","corredor":9,"un":"pct","essencial":0,"tags":[],"rende":2,"gond":"A1","base":[0.4,"kg"]},{"id":"ervilha_cong","nome":"Seleta congelada","corredor":9,"un":"pct","essencial":0,"tags":[],"rende":2,"gond":"B1","base":[0.3,"kg"]},{"id":"papel_hig","nome":"Papel higiênico","corredor":10,"un":"12un","essencial":1,"tags":[],"rende":1,"gond":"A1","base":[12,"rolo"]},{"id":"sabonete","nome":"Sabonete","corredor":10,"un":"un","essencial":1,"tags":[],"rende":1,"gond":"B1","base":[0.09,"kg"]},{"id":"creme_dental","nome":"Creme dental","corredor":10,"un":"un","essencial":1,"tags":[],"rende":1,"gond":"A2"},{"id":"shampoo","nome":"Shampoo","corredor":10,"un":"un","essencial":0,"tags":[],"rende":1,"gond":"B2"},{"id":"fralda","nome":"Fralda","corredor":10,"un":"pct","essencial":0,"tags":[],"rende":1,"gond":"A3","base":[40,"un"]},{"id":"detergente","nome":"Detergente","corredor":11,"un":"un","essencial":1,"tags":[],"rende":1,"gond":"A1"},{"id":"sabao_po","nome":"Sabão em pó","corredor":11,"un":"kg","essencial":1,"tags":[],"rende":1,"gond":"B1","base":[1,"kg"]},{"id":"amaciante","nome":"Amaciante","corredor":11,"un":"2L","essencial":0,"tags":[],"rende":1,"gond":"A2","base":[2,"L"]},{"id":"desinfetante","nome":"Desinfetante","corredor":11,"un":"2L","essencial":0,"tags":[],"rende":1,"gond":"B2","base":[2,"L"]},{"id":"esponja","nome":"Esponja","corredor":11,"un":"pct","essencial":0,"tags":[],"rende":1,"gond":"A3","base":[4,"un"]}],"produtos":[{"g":"banana","m":"Feira do Dia","p":5.49,"v":52},{"g":"banana","m":"Banana caturra","p":6.9,"v":88},{"g":"banana","m":"Orgânica Vale Verde","p":12.9,"v":21},{"g":"tomate","m":"Feira do Dia","p":7.29,"v":49},{"g":"tomate","m":"Tomate italiano","p":9.4,"v":84},{"g":"tomate","m":"Orgânico Vale Verde","p":16.9,"v":18},{"g":"batata","m":"Feira do Dia","p":4.79,"v":55},{"g":"batata","m":"Batata inglesa lavada","p":5.8,"v":86},{"g":"batata","m":"Batata orgânica","p":11.5,"v":15},{"g":"cebola","m":"Feira do Dia","p":4.99,"v":51},{"g":"cebola","m":"Cebola branca","p":6.1,"v":83},{"g":"cebola","m":"Cebola roxa","p":9.9,"v":29},{"g":"alho","m":"Alho nacional","p":2.49,"v":72},{"g":"alho","m":"Alho argentino","p":3.9,"v":81},{"g":"alho","m":"Alho descascado","p":7.9,"v":24},{"g":"cenoura","m":"Feira do Dia","p":4.29,"v":58},{"g":"cenoura","m":"Cenoura lavada","p":5.6,"v":80},{"g":"cenoura","m":"Orgânica Vale Verde","p":10.9,"v":14},{"g":"alface","m":"Alface lisa","p":2.99,"v":61},{"g":"alface","m":"Alface crespa","p":4.2,"v":78},{"g":"alface","m":"Alface hidropônica","p":6.9,"v":33},{"g":"maca","m":"Maçã nacional","p":7.9,"v":57},{"g":"maca","m":"Maçã gala","p":9.9,"v":82},{"g":"maca","m":"Maçã fuji importada","p":16.9,"v":20},{"g":"laranja","m":"Laranja de suco","p":4.49,"v":63},{"g":"laranja","m":"Laranja pera","p":6.2,"v":79},{"g":"laranja","m":"Laranja bahia","p":9.4,"v":27},{"g":"couve","m":"Couve manteiga","p":3.29,"v":66},{"g":"couve","m":"Couve higienizada","p":5.5,"v":74},{"g":"couve","m":"Couve orgânica","p":8.9,"v":17},{"g":"pao_forma","m":"Essencial Super","p":7.49,"v":48},{"g":"pao_forma","m":"Pullman","p":11.5,"v":90},{"g":"pao_forma","m":"Wickbold Grão Sabor","p":16.9,"v":35},{"g":"pao_frances","m":"Pão do dia","p":12.9,"v":68},{"g":"pao_frances","m":"Pão francês da casa","p":15.9,"v":89},{"g":"pao_frances","m":"Pão australiano","p":26.9,"v":22},{"g":"pao_sg","m":"Aminna","p":19.9,"v":31},{"g":"pao_sg","m":"Schar","p":26.9,"v":44},{"g":"pao_sg","m":"Belive Zero","p":32.9,"v":12},{"g":"carne_moida","m":"Patinho moído","p":29.9,"v":58},{"g":"carne_moida","m":"Acém moído 1ª","p":34.9,"v":87},{"g":"carne_moida","m":"Filé mignon moído","p":64.9,"v":13},{"g":"frango","m":"Frango congelado","p":13.9,"v":60},{"g":"frango","m":"Peito Seara resfriado","p":18.9,"v":91},{"g":"frango","m":"Frango caipira","p":34.9,"v":16},{"g":"bife","m":"Coxão duro","p":32.9,"v":44},{"g":"bife","m":"Alcatra","p":48.9,"v":79},{"g":"bife","m":"Picanha maturada","p":89.9,"v":25},{"g":"linguica","m":"Linguiça mista","p":16.9,"v":54},{"g":"linguica","m":"Toscana Aurora","p":22.5,"v":83},{"g":"linguica","m":"Artesanal defumada","p":39.9,"v":19},{"g":"costela","m":"Costela ripa","p":26.9,"v":47},{"g":"costela","m":"Costela janela","p":34.9,"v":72},{"g":"costela","m":"Costela premium","p":54.9,"v":14},{"g":"tilapia","m":"Tilápia congelada","p":29.9,"v":42},{"g":"tilapia","m":"Filé Copacol","p":42.9,"v":70},{"g":"tilapia","m":"Salmão fresco","p":89.9,"v":23},{"g":"leite","m":"Essencial Super","p":4.29,"v":50},{"g":"leite","m":"Piá integral","p":5.6,"v":92},{"g":"leite","m":"Leite A2 Vitália","p":9.9,"v":17},{"g":"leite_zl","m":"Essencial Zero","p":5.9,"v":34},{"g":"leite_zl","m":"Piá Zero Lactose","p":7.9,"v":58},{"g":"leite_zl","m":"Verde Campo","p":10.9,"v":26},{"g":"ovo","m":"Ovos brancos 12un","p":11.9,"v":62},{"g":"ovo","m":"Ovos vermelhos 12un","p":15.9,"v":85},{"g":"ovo","m":"Ovos caipira 12un","p":24.9,"v":28},{"g":"margarina","m":"Essencial Super","p":5.9,"v":46},{"g":"margarina","m":"Qualy 500g","p":11.9,"v":88},{"g":"margarina","m":"Manteiga Aviação","p":26.9,"v":31},{"g":"queijo","m":"Mussarela fatiada","p":29.9,"v":55},{"g":"queijo","m":"Mussarela Tirol","p":42.9,"v":81},{"g":"queijo","m":"Mussarela búfala","p":69.9,"v":15},{"g":"queijo_zl","m":"Essencial Zero","p":24.9,"v":22},{"g":"queijo_zl","m":"Verde Campo","p":29.9,"v":47},{"g":"queijo_zl","m":"President Zero","p":38.9,"v":11},{"g":"requeijao","m":"Essencial Super","p":5.9,"v":44},{"g":"requeijao","m":"Catupiry","p":13.9,"v":84},{"g":"requeijao","m":"Requeijão artesanal","p":19.9,"v":18},{"g":"iogurte","m":"Essencial Super","p":2.29,"v":49},{"g":"iogurte","m":"Nestlé natural","p":4.1,"v":86},{"g":"iogurte","m":"Yakult Grego","p":7.9,"v":30},{"g":"creme_leite","m":"Essencial Super","p":3.29,"v":45},{"g":"creme_leite","m":"Nestlé","p":5.4,"v":85},{"g":"creme_leite","m":"Creme fresco Scala","p":12.9,"v":16},{"g":"presunto","m":"Presunto cozido","p":24.9,"v":53},{"g":"presunto","m":"Sadia fatiado","p":34.9,"v":80},{"g":"presunto","m":"Parma italiano","p":119.9,"v":9},{"g":"arroz","m":"Essencial Super","p":19.9,"v":54},{"g":"arroz","m":"Tio João","p":28.9,"v":93},{"g":"arroz","m":"Arroz arbóreo","p":44.9,"v":17},{"g":"feijao","m":"Essencial Super","p":6.9,"v":52},{"g":"feijao","m":"Camil preto","p":9.8,"v":90},{"g":"feijao","m":"Feijão orgânico","p":16.9,"v":13},{"g":"macarrao","m":"Essencial Super","p":3.49,"v":50},{"g":"macarrao","m":"Renata espaguete","p":5.9,"v":89},{"g":"macarrao","m":"Barilla grano duro","p":14.9,"v":24},{"g":"macarrao_sg","m":"Essencial Sem Glúten","p":8.9,"v":26},{"g":"macarrao_sg","m":"Urbano arroz","p":12.4,"v":49},{"g":"macarrao_sg","m":"Barilla sem glúten","p":19.9,"v":15},{"g":"oleo","m":"Essencial Super","p":5.9,"v":51},{"g":"oleo","m":"Liza soja","p":8.4,"v":91},{"g":"oleo","m":"Óleo de canola","p":14.9,"v":27},{"g":"sal","m":"Essencial Super","p":1.99,"v":55},{"g":"sal","m":"Cisne refinado","p":3.2,"v":87},{"g":"sal","m":"Sal rosa do Himalaia","p":14.9,"v":19},{"g":"lentilha","m":"Essencial Super","p":8.9,"v":38},{"g":"lentilha","m":"Kicaldo","p":11.9,"v":66},{"g":"lentilha","m":"Lentilha francesa","p":21.9,"v":12},{"g":"graobico","m":"Essencial Super","p":9.9,"v":36},{"g":"graobico","m":"Yoki","p":13.5,"v":64},{"g":"graobico","m":"Grão importado","p":24.9,"v":11},{"g":"azeite","m":"Essencial Super","p":22.9,"v":41},{"g":"azeite","m":"Gallo extra virgem","p":39.9,"v":78},{"g":"azeite","m":"Andorinha reserva","p":64.9,"v":20},{"g":"farinha_mand","m":"Essencial Super","p":4.9,"v":43},{"g":"farinha_mand","m":"Yoki biju","p":7.9,"v":71},{"g":"farinha_mand","m":"Farinha artesanal","p":13.9,"v":15},{"g":"cafe","m":"Essencial Super","p":14.9,"v":53},{"g":"cafe","m":"Melitta tradicional","p":24.9,"v":92},{"g":"cafe","m":"Café especial 3 Corações","p":39.9,"v":26},{"g":"acucar","m":"Essencial Super","p":3.9,"v":52},{"g":"acucar","m":"União refinado","p":5.9,"v":89},{"g":"acucar","m":"Açúcar demerara","p":12.9,"v":25},{"g":"farinha","m":"Essencial Super","p":3.9,"v":50},{"g":"farinha","m":"Dona Benta","p":6.9,"v":88},{"g":"farinha","m":"Farinha italiana 00","p":18.9,"v":14},{"g":"biscoito","m":"Essencial Super","p":2.9,"v":47},{"g":"biscoito","m":"Bauducco maisena","p":6.9,"v":86},{"g":"biscoito","m":"Biscoito artesanal","p":14.9,"v":17},{"g":"achocolatado","m":"Essencial Super","p":7.9,"v":45},{"g":"achocolatado","m":"Nescau 400g","p":13.9,"v":87},{"g":"achocolatado","m":"Achocolatado orgânico","p":24.9,"v":12},{"g":"fermento","m":"Essencial Super","p":3.9,"v":40},{"g":"fermento","m":"Royal","p":6.9,"v":76},{"g":"fermento","m":"Fermento natural","p":12.9,"v":11},{"g":"molho","m":"Essencial Super","p":2.49,"v":51},{"g":"molho","m":"Pomarola sachê","p":4.9,"v":90},{"g":"molho","m":"Molho artesanal Rossi","p":13.9,"v":18},{"g":"milho","m":"Essencial Super","p":3.29,"v":44},{"g":"milho","m":"Quero","p":5.9,"v":82},{"g":"milho","m":"Milho orgânico","p":9.9,"v":13},{"g":"ervilha","m":"Essencial Super","p":3.29,"v":42},{"g":"ervilha","m":"Quero","p":5.9,"v":79},{"g":"ervilha","m":"Ervilha francesa","p":10.9,"v":12},{"g":"atum","m":"Essencial Super","p":6.9,"v":46},{"g":"atum","m":"Gomes da Costa","p":11.9,"v":84},{"g":"atum","m":"Atum em azeite premium","p":19.9,"v":16},{"g":"mostarda","m":"Essencial Super","p":3.9,"v":39},{"g":"mostarda","m":"Hemmer","p":7.9,"v":75},{"g":"mostarda","m":"Dijon francesa","p":18.9,"v":13},{"g":"ketchup","m":"Essencial Super","p":4.9,"v":41},{"g":"ketchup","m":"Heinz","p":13.9,"v":83},{"g":"ketchup","m":"Ketchup artesanal","p":19.9,"v":10},{"g":"suco","m":"Essencial Super","p":8.9,"v":43},{"g":"suco","m":"Aurora integral","p":18.9,"v":80},{"g":"suco","m":"Salton integral","p":26.9,"v":21},{"g":"refri","m":"Essencial Cola","p":4.9,"v":38},{"g":"refri","m":"Coca-Cola 2L","p":11.9,"v":94},{"g":"refri","m":"Coca-Cola vidro 1L","p":14.9,"v":29},{"g":"agua","m":"Essencial Super","p":4.9,"v":49},{"g":"agua","m":"Crystal 5L","p":7.9,"v":81},{"g":"agua","m":"Perrier 750ml","p":18.9,"v":8},{"g":"batata_cong","m":"Essencial Super","p":9.9,"v":40},{"g":"batata_cong","m":"McCain","p":19.9,"v":82},{"g":"batata_cong","m":"McCain rústica","p":26.9,"v":22},{"g":"ervilha_cong","m":"Essencial Super","p":7.9,"v":35},{"g":"ervilha_cong","m":"Bonduelle seleta","p":14.9,"v":68},{"g":"ervilha_cong","m":"Seleta premium","p":22.9,"v":12},{"g":"papel_hig","m":"Essencial Super","p":16.9,"v":50},{"g":"papel_hig","m":"Neve 12un","p":27.9,"v":88},{"g":"papel_hig","m":"Neve Naturali","p":39.9,"v":24},{"g":"sabonete","m":"Essencial Super","p":1.49,"v":48},{"g":"sabonete","m":"Dove","p":5.9,"v":87},{"g":"sabonete","m":"Granado","p":12.9,"v":20},{"g":"creme_dental","m":"Essencial Super","p":3.9,"v":46},{"g":"creme_dental","m":"Colgate Total 12","p":13.9,"v":89},{"g":"creme_dental","m":"Sensodyne","p":26.9,"v":27},{"g":"shampoo","m":"Essencial Super","p":7.9,"v":42},{"g":"shampoo","m":"Seda","p":16.9,"v":83},{"g":"shampoo","m":"Pantene Pro-V","p":34.9,"v":25},{"g":"fralda","m":"Essencial Super","p":34.9,"v":39},{"g":"fralda","m":"Pampers M 40un","p":62.9,"v":85},{"g":"fralda","m":"Pampers Premium","p":89.9,"v":23},{"g":"detergente","m":"Essencial Super","p":1.79,"v":52},{"g":"detergente","m":"Ypê neutro","p":3.1,"v":91},{"g":"detergente","m":"Limpol concentrado","p":6.9,"v":19},{"g":"sabao_po","m":"Essencial Super","p":11.9,"v":51},{"g":"sabao_po","m":"Omo 1kg","p":21.9,"v":90},{"g":"sabao_po","m":"Omo Perfect","p":34.9,"v":22},{"g":"amaciante","m":"Essencial Super","p":8.9,"v":44},{"g":"amaciante","m":"Comfort 2L","p":21.9,"v":84},{"g":"amaciante","m":"Downy concentrado","p":32.9,"v":21},{"g":"desinfetante","m":"Essencial Super","p":5.9,"v":43},{"g":"desinfetante","m":"Pinho Sol 2L","p":16.9,"v":82},{"g":"desinfetante","m":"Veja Perfumes","p":24.9,"v":18},{"g":"esponja","m":"Essencial Super","p":2.9,"v":45},{"g":"esponja","m":"Scotch-Brite 4un","p":9.9,"v":80},{"g":"esponja","m":"Esponja antibactéria","p":14.9,"v":15}],"receitas":[{"nome":"Arroz, feijão e bife acebolado","tipo":"Almoço","porcoes":4,"tempo":40,"tags":["carne"],"ing":[["arroz",1,"xíc",0.04],["feijao",1,"xíc",0.2],["bife",0.6,"kg",0.6],["cebola",0.2,"kg",0.2],["alho",1,"dente",0.1],["oleo",1,"colher",0.017],["sal",1,"pitada",0.002]]},{"nome":"Galinhada com legumes","tipo":"Almoço","porcoes":5,"tempo":50,"tags":["carne"],"ing":[["arroz",2,"xíc",0.08],["frango",0.8,"kg",0.8],["cenoura",0.3,"kg",0.3],["cebola",0.2,"kg",0.2],["alho",2,"dentes",0.2],["molho",1,"un",1],["oleo",1,"colher",0.017],["sal",1,"pitada",0.002]]},{"nome":"Estrogonofe de frango","tipo":"Jantar","porcoes":4,"tempo":35,"tags":["carne","lactose"],"ing":[["frango",0.7,"kg",0.7],["creme_leite",1,"cx",1],["molho",1,"un",1],["ketchup",1,"colher",0.04],["mostarda",1,"colher",0.04],["arroz",1,"xíc",0.04],["batata_cong",1,"pct",1],["cebola",0.15,"kg",0.15]]},{"nome":"Macarrão ao sugo","tipo":"Jantar","porcoes":4,"tempo":25,"tags":["gluten"],"ing":[["macarrao",1,"pct",1],["molho",2,"un",2],["tomate",0.3,"kg",0.3],["alho",2,"dentes",0.2],["cebola",0.15,"kg",0.15],["azeite",1,"colher",0.03],["sal",1,"pitada",0.002]]},{"nome":"Escondidinho de carne","tipo":"Jantar","porcoes":5,"tempo":55,"tags":["carne","lactose"],"ing":[["carne_moida",0.7,"kg",0.7],["batata",1,"kg",1],["leite",0.2,"L",0.2],["margarina",1,"colher",0.033],["queijo",0.2,"kg",0.2],["cebola",0.15,"kg",0.15],["alho",2,"dentes",0.2]]},{"nome":"Sopa de legumes","tipo":"Jantar","porcoes":4,"tempo":40,"tags":[],"ing":[["batata",0.5,"kg",0.5],["cenoura",0.3,"kg",0.3],["cebola",0.15,"kg",0.15],["couve",1,"maço",1],["alho",2,"dentes",0.2],["sal",1,"pitada",0.002],["oleo",1,"colher",0.017]]},{"nome":"Omelete com salada","tipo":"Rápido","porcoes":2,"tempo":15,"tags":["lactose"],"ing":[["ovo",0.5,"dz",0.5],["queijo",0.1,"kg",0.1],["tomate",0.2,"kg",0.2],["alface",1,"un",1],["cebola",0.1,"kg",0.1],["sal",1,"pitada",0.002],["azeite",1,"colher",0.03]]},{"nome":"Arroz com lentilha","tipo":"Almoço","porcoes":4,"tempo":35,"tags":[],"ing":[["arroz",1,"xíc",0.04],["lentilha",1,"pct",1],["cebola",0.2,"kg",0.2],["alho",2,"dentes",0.2],["cenoura",0.2,"kg",0.2],["oleo",1,"colher",0.017],["sal",1,"pitada",0.002]]},{"nome":"Estrogonofe de grão-de-bico","tipo":"Jantar","porcoes":4,"tempo":30,"tags":[],"ing":[["graobico",1,"pct",1],["molho",1,"un",1],["cebola",0.15,"kg",0.15],["alho",2,"dentes",0.2],["arroz",1,"xíc",0.04],["ketchup",1,"colher",0.04],["oleo",1,"colher",0.017]]},{"nome":"Salada de atum","tipo":"Rápido","porcoes":2,"tempo":10,"tags":["carne"],"ing":[["atum",2,"lata",2],["alface",1,"un",1],["tomate",0.2,"kg",0.2],["cebola",0.1,"kg",0.1],["milho",1,"lata",1],["azeite",1,"colher",0.03]]},{"nome":"Panqueca de carne","tipo":"Almoço","porcoes":4,"tempo":50,"tags":["carne","gluten","lactose"],"ing":[["farinha",0.3,"kg",0.3],["ovo",0.25,"dz",0.25],["leite",0.5,"L",0.5],["carne_moida",0.5,"kg",0.5],["molho",2,"un",2],["cebola",0.15,"kg",0.15],["queijo",0.15,"kg",0.15]]},{"nome":"Feijoada simples","tipo":"Almoço","porcoes":6,"tempo":90,"tags":["carne"],"ing":[["feijao",1,"kg",1],["linguica",0.4,"kg",0.4],["costela",0.5,"kg",0.5],["arroz",2,"xíc",0.08],["couve",1,"maço",1],["farinha_mand",1,"pct",1],["laranja",0.5,"kg",0.5],["alho",3,"dentes",0.3]]},{"nome":"Bolo de cenoura","tipo":"Doce","porcoes":8,"tempo":55,"tags":["gluten","lactose"],"ing":[["cenoura",0.3,"kg",0.3],["farinha",0.4,"kg",0.4],["acucar",0.3,"kg",0.3],["ovo",0.25,"dz",0.25],["oleo",1,"xíc",0.27],["fermento",1,"un",1],["achocolatado",1,"pct",1]]},{"nome":"Tilápia com legumes","tipo":"Jantar","porcoes":4,"tempo":35,"tags":["carne"],"ing":[["tilapia",0.6,"kg",0.6],["batata",0.5,"kg",0.5],["cenoura",0.3,"kg",0.3],["alho",2,"dentes",0.2],["azeite",1,"colher",0.03],["sal",1,"pitada",0.002],["laranja",0.3,"kg",0.3]]},{"nome":"Macarronada sem glúten","tipo":"Jantar","porcoes":4,"tempo":30,"tags":[],"ing":[["macarrao_sg",1,"pct",1],["molho",2,"un",2],["tomate",0.3,"kg",0.3],["alho",2,"dentes",0.2],["azeite",1,"colher",0.03],["cebola",0.15,"kg",0.15]]}]};
+
+const GRUPO = Object.fromEntries(D.grupos.map(g => [g.id, g]));
+const CORR  = Object.fromEntries(D.corredores.map(c => [c.n, c]));
+const PORGRUPO = {};
+D.produtos.forEach(p => (PORGRUPO[p.g] = PORGRUPO[p.g] || []).push(p));
+
+const real = n => "R$ " + (Math.round(n * 100) / 100).toFixed(2).replace(".", ",");
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ── armazenamento local ──────────────────────────────────── */
+const Armazem = {
+  ok: (() => { try { localStorage.setItem("_t", "1"); localStorage.removeItem("_t"); return true; }
+               catch (e) { return false; } })(),
+  ler(chave, padrao){ if (!this.ok) return padrao;
+    try { const v = localStorage.getItem("pila." + chave); return v ? JSON.parse(v) : padrao; }
+    catch (e) { return padrao; } },
+  grava(chave, valor){ if (!this.ok) return;
+    try { localStorage.setItem("pila." + chave, JSON.stringify(valor)); } catch (e) {} },
+  apaga(chave){ if (this.ok) localStorage.removeItem("pila." + chave); }
+};
+
+/* Hash de senha. Num sistema real isso acontece NO SERVIDOR, com bcrypt ou argon2.
+   Aqui o objetivo é só não guardar a senha em texto puro no aparelho do usuário. */
+function hashSenha(senha, sal){
+  let h = 5381;
+  const txt = sal + "·" + senha + "·pila";
+  for (let i = 0; i < txt.length; i++) h = ((h << 5) + h + txt.charCodeAt(i)) >>> 0;
+  let h2 = 2166136261;
+  for (let i = txt.length - 1; i >= 0; i--){ h2 ^= txt.charCodeAt(i); h2 = Math.imul(h2, 16777619) >>> 0; }
+  return h.toString(36) + "." + h2.toString(36);
+}
+const novoSal = () => Math.random().toString(36).slice(2, 10);
+
+/* ── estado ───────────────────────────────────────────────── */
+const ESTADO_ZERO = () => ({
+  pessoas:2, dias:15, orcamento:null, restricoes:[], extras:[],
+  filtro:"vendido", tipoRec:"todos", aba:"todos", busca:"", canal:"caixa",
+  cesta:[], receita:null, codigo:null, modo:"casa", corredorAtual:null,
+  ajuste:null, montada:false,
+  abreBusca:false, abreLista:false, buscaMerc:""   /* estado da tela do mercado */
+});
+let S = ESTADO_ZERO();
+let USUARIO = null;
+
+let salvaTimer = null;
+function salvar(){
+  clearTimeout(salvaTimer);
+  salvaTimer = setTimeout(() => {
+    const { busca, ...resto } = S;
+    Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
+  }, 120);
+}
+function carregarEstado(){
+  const salvo = Armazem.ler("estado" + (USUARIO ? "." + USUARIO.id : ""), null);
+  S = Object.assign(ESTADO_ZERO(), salvo || {});
+  S.busca = "";
+  if (USUARIO && USUARIO.pessoas && !salvo) S.pessoas = USUARIO.pessoas;
+}
+
+/* ── preço e catálogo ─────────────────────────────────────── */
+function escolher(gid, filtro){
+  const l = PORGRUPO[gid]; if (!l || !l.length) return null;
+  const o = [...l];
+  if (filtro === "barato") o.sort((a, b) => a.p - b.p);
+  else if (filtro === "caro") o.sort((a, b) => b.p - a.p);
+  else o.sort((a, b) => b.v - a.v);
+  return o[0];
+}
+const maisBarato = g => escolher(g, "barato");
+const produtoDe = i => (i.eco ? maisBarato(i.g) : escolher(i.g, S.filtro));
+const subtotal  = i => produtoDe(i).p * i.qtd;
+const total     = () => S.cesta.reduce((s, i) => s + subtotal(i), 0);
+const noCarrinho = g => S.cesta.find(i => i.g === g);
+
+/* preço por unidade de medida — a conta que importa em atacadista */
+function porMedida(gid, preco){
+  const b = GRUPO[gid].base;
+  if (!b) return "";
+  const v = preco / b[0];
+  return real(v) + "/" + b[1];
+}
+
+/* ── restrições ───────────────────────────────────────────── */
+const TROCA = { leite:"leite_zl", queijo:"queijo_zl", pao_forma:"pao_sg", macarrao:"macarrao_sg" };
+const permitido = g => GRUPO[g] && !GRUPO[g].tags.some(t => S.restricoes.includes(t));
+function resolver(g){
+  if (permitido(g)) return g;
+  const a = TROCA[g];
+  return (a && permitido(a)) ? a : null;
+}
+
+/* A lista de itens protegidos é UMA SÓ, usada tanto para montar a cesta quanto
+   para calcular o piso de preço. Se as duas divergirem, o app se contradiz. */
+function listaProtegida(){
+  const fora = [];
+  D.grupos.filter(g => g.essencial).forEach(g => {
+    const f = resolver(g.id);
+    if (f && !fora.includes(f)) fora.push(f);
+  });
+  if (S.restricoes.includes("carne")) ["lentilha", "graobico"].forEach(g => {
+    if (!fora.includes(g)) fora.push(g);
+  });
+  return fora;
+}
+
+/* ── quantidades ──────────────────────────────────────────── */
+const QTD = { arroz:1,feijao:1,oleo:1,sal:1,acucar:1,cafe:1,farinha:1,macarrao:2,macarrao_sg:2,
+  molho:3,leite:4,leite_zl:4,ovo:1,margarina:1,pao_forma:1,pao_frances:1,pao_sg:1,
+  carne_moida:1,frango:1,banana:1,tomate:1,batata:1,cebola:1,alho:1,cenoura:1,
+  papel_hig:1,sabonete:3,creme_dental:1,detergente:2,sabao_po:1,queijo:1,linguica:1,
+  iogurte:4,biscoito:2,refri:2,fralda:1,shampoo:1,maca:1,lentilha:1,graobico:1,
+  alface:1,laranja:1,couve:1,azeite:1 };
+/* pessoas E duração entram na conta — as duas perguntas têm consequência */
+function qtdPara(g){
+  const base = QTD[g] || 1;
+  const fp = 0.55 + S.pessoas * 0.28;      /* 1 pessoa ≈ 0,83 · 6 pessoas ≈ 2,23 */
+  const fd = S.dias / 15;                  /* 7d ≈ 0,47 · 15d = 1 · 30d = 2 */
+  return Math.max(1, Math.round(base * fp * fd));
+}
+/* piso: uma unidade de cada protegido, marca mais barata — é o mínimo que a cesta pode custar */
+const pisoAbsoluto = () => listaProtegida().reduce((s, g) => s + maisBarato(g).p, 0);
+/* ideal: as quantidades certas pro perfil, ainda na marca mais barata */
+const compraIdeal = () => listaProtegida().reduce((s, g) => s + maisBarato(g).p * qtdPara(g), 0);
+
+/* ── montagem da cesta ────────────────────────────────────── */
+function montarCesta(ajustar = true){
+  const itens = [];
+  const juntar = (gid, protegido) => {
+    const fim = resolver(gid);
+    if (!fim || itens.some(i => i.g === fim)) return;
+    itens.push({ g:fim, qtd:qtdPara(fim), protegido, trocado:fim !== gid ? gid : null, eco:false });
+  };
+  listaProtegida().forEach(g => juntar(g, true));
+  S.extras.forEach(g => juntar(g, false));
+  S.cesta = itens;
+  S.cesta.forEach(i => i.qtdPlena = i.qtd);
+  S.montada = true;
+  S.ajuste = null;
+  if (ajustar) ajustarAoOrcamento();
+  salvar();
+}
+
+/* Ajuste ao orçamento — explícito, contado e reversível.
+   Ordem: marca dos supérfluos → marca dos essenciais → quantidade dos supérfluos
+        → remover supérfluos → quantidade dos essenciais. */
+function ajustarAoOrcamento(){
+  S.cesta.forEach(i => { i.eco = false; if (i.qtdPlena) i.qtd = i.qtdPlena; else i.qtdPlena = i.qtd; });
+  const reg = { marcas:0, quantidades:new Set(), removidos:[], insuficiente:false, ativo:false };
+  S.ajuste = reg;
+  if (!S.orcamento || total() <= S.orcamento) return;
+  reg.ativo = true;
+
+  for (const i of S.cesta){ if (total() <= S.orcamento) return fim(); if (!i.protegido && !i.eco){ i.eco = true; reg.marcas++; } }
+  for (const i of S.cesta){ if (total() <= S.orcamento) return fim(); if (!i.eco){ i.eco = true; reg.marcas++; } }
+
+  const reduzir = filtro => { let guarda = 0;
+    while (total() > S.orcamento && guarda++ < 4000){
+      const alvo = S.cesta.filter(i => filtro(i) && i.qtd > 1).sort((a, b) => subtotal(b) - subtotal(a))[0];
+      if (!alvo) return;
+      alvo.qtd--; reg.quantidades.add(alvo.g);
+    } };
+  reduzir(i => !i.protegido);
+  if (total() <= S.orcamento) return fim();
+
+  for (let k = S.cesta.length - 1; k >= 0; k--){
+    if (total() <= S.orcamento) return fim();
+    if (!S.cesta[k].protegido) reg.removidos.push(GRUPO[S.cesta[k].g].nome), S.cesta.splice(k, 1);
+  }
+  reduzir(i => i.protegido);
+  if (total() > S.orcamento) reg.insuficiente = true;
+  return fim();
+
+  function fim(){ reg.quantidades = [...reg.quantidades]; }
+}
+function desfazerAjuste(){
+  S.cesta.forEach(i => { i.eco = false; if (i.qtdPlena) i.qtd = i.qtdPlena; });
+  S.ajuste = null; salvar();
+}
+const economia = () => S.cesta.reduce((s, i) => s + escolher(i.g, "vendido").p * i.qtd, 0) - total();
+
+/* ══════════ ROTEADOR ══════════════════════════════════════ */
+const ROTAS = {
+  "#/entrar":         { tela:"v-entrar",   chrome:false },
+  "#/onde":           { tela:"v-onde",     chrome:true },
+  "#/casa/plano":     { tela:"v-plano",    chrome:true, modo:"casa", etapa:1 },
+  "#/casa/cesta":     { tela:"v-cesta",    chrome:true, modo:"casa", etapa:2, exigeCesta:true, barra:"casa" },
+  "#/casa/receitas":  { tela:"v-receitas", chrome:true, modo:"casa", etapa:3, exigeCesta:true, barra:"casa" },
+  "#/casa/receita":   { tela:"v-receita",  chrome:true, modo:"casa", etapa:3, exigeCesta:true, barra:"casa" },
+  "#/casa/pronto":    { tela:"v-pronto",   chrome:true, modo:"casa", etapa:4, exigeCesta:true },
+  "#/mercado/rota":   { tela:"v-rota",     chrome:true, modo:"mercado", exigeCesta:true, barra:"mercado" },
+  "#/mercado/pagar":  { tela:"v-pagar",    chrome:true, modo:"mercado", exigeCesta:true }
+};
+const ETAPAS = [
+  { r:"#/casa/plano",    n:"Orçamento" },
+  { r:"#/casa/cesta",    n:"Cesta" },
+  { r:"#/casa/receitas", n:"Receitas" },
+  { r:"#/casa/pronto",   n:"Pronto" }
+];
+let rotaAtual = "";
+
+/* As barras grudentas (trilha e topo do mercado) precisam saber a altura real do
+   cabeçalho — no celular ele pode quebrar de linha e mudar de tamanho. */
+function medirTopo(){
+  const t = $("#topo");
+  const h = t.hidden ? 0 : Math.round(t.getBoundingClientRect().height);
+  document.documentElement.style.setProperty("--h-topo", h + "px");
+}
+addEventListener("resize", medirTopo);
+addEventListener("orientationchange", () => setTimeout(medirTopo, 120));
+
+function ir(rota, trocar){
+  if (location.hash === rota) rotear();
+  else if (trocar) location.replace(rota);
+  else location.hash = rota;
+}
+function rotear(){
+  let hash = location.hash || "#/entrar";
+  let rota = ROTAS[hash];
+
+  if (!rota){ return ir("#/entrar", true); }
+  if (!USUARIO && hash !== "#/entrar"){ return ir("#/entrar", true); }
+  if (USUARIO && hash === "#/entrar"){ return ir("#/onde", true); }
+  if (rota.exigeCesta && !S.cesta.length){ return ir("#/casa/plano", true); }
+
+  rotaAtual = hash;
+  $$(".tela").forEach(t => t.classList.remove("ativa"));
+  document.getElementById(rota.tela).classList.add("ativa");
+  $("#topo").hidden = !rota.chrome;
+  medirTopo();
+
+  if (rota.modo && S.modo !== rota.modo){ S.modo = rota.modo; salvar(); }
+  $$("#troca button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.modo === S.modo)));
+
+  const mostraTrilha = !!rota.etapa;
+  $("#trilha").hidden = !mostraTrilha;
+  if (mostraTrilha) desenharTrilha(rota.etapa);
+
+  $("#rodapeFixo").classList.toggle("visivel", !!rota.barra);
+  document.body.classList.toggle("com-barra", !!rota.barra);
+  if (!rota.barra) $("#gaveta").classList.remove("aberta");
+
+  if (hash === "#/onde")           desenharOnde();
+  if (hash === "#/casa/plano")     desenharPlano();
+  if (hash === "#/casa/cesta")     { desenharAbas(); desenharCatalogo(); desenharPainelAjuste(); textoCesta(); }
+  if (hash === "#/casa/receitas")  desenharReceitas();
+  if (hash === "#/casa/receita"){
+    if (!S.receita || !D.receitas.some(r => r.nome === S.receita)) return ir("#/casa/receitas", true);
+    desenharDetalheReceita();
+  }
+  if (hash === "#/casa/pronto")    desenharPronto();
+  if (hash === "#/mercado/rota")   desenharRota();
+  if (hash === "#/mercado/pagar")  desenharPagamento();
+
+  if (rota.barra) atualizarBarra();
+  window.scrollTo({ top:0, behavior:"instant" });
+}
+addEventListener("hashchange", rotear);
+
+function desenharTrilha(atual){
+  $("#trilhaWrap").innerHTML = ETAPAS.map((e, k) => {
+    const liberado = k === 0 || S.cesta.length > 0;
+    const cont = e.r === "#/casa/cesta" && S.cesta.length
+      ? `<span class="cont">${S.cesta.length}</span>` : "";
+    return `<button data-rota="${e.r}" ${liberado ? "" : "disabled"}
+      ${k + 1 === atual ? 'aria-current="step"' : ""}>${k + 1}. ${e.n}${cont}</button>`;
+  }).join("");
+}
+
+/* ══════════ AUTENTICAÇÃO ═════════════════════════════════ */
+const contas = () => Armazem.ler("contas", []);
+const gravaContas = c => Armazem.grava("contas", c);
+
+function entrarComo(conta, lembrar){
+  USUARIO = conta;
+  if (lembrar !== false) Armazem.grava("sessao", conta.id);
+  carregarEstado();
+  $("#euNome").textContent = conta.nome.split(" ")[0];
+  $("#avatar").textContent = (conta.nome.trim()[0] || "?").toUpperCase();
+  $("#saudacao").textContent = conta.visitante
+    ? "Onde você está agora?" : `Oi, ${conta.nome.split(" ")[0]}. Onde você está?`;
+  ir(S.cesta.length ? "#/onde" : "#/casa/plano", true);
+}
+
+$("#abaEntrar").addEventListener("click", () => trocaAba(true));
+$("#abaCriar").addEventListener("click", () => trocaAba(false));
+function trocaAba(entrar){
+  $("#abaEntrar").setAttribute("aria-selected", String(entrar));
+  $("#abaCriar").setAttribute("aria-selected", String(!entrar));
+  $("#formEntrar").hidden = !entrar;
+  $("#formCriar").hidden = entrar;
+}
+$$("[data-olho]").forEach(b => b.addEventListener("click", () => {
+  const alvo = document.getElementById(b.dataset.olho);
+  const ver = alvo.type === "password";
+  alvo.type = ver ? "text" : "password";
+  b.textContent = ver ? "🙈" : "👁";
+  b.setAttribute("aria-label", ver ? "Ocultar senha" : "Mostrar senha");
+}));
+
+const emailOk = e => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e.trim());
+function forcaSenha(s){
+  let n = 0;
+  if (s.length >= 6) n++;
+  if (s.length >= 10) n++;
+  if (/[A-Z]/.test(s) && /[a-z]/.test(s)) n++;
+  if (/[0-9]/.test(s) || /[^\w\s]/.test(s)) n++;
+  return Math.min(4, n);
+}
+$("#cSenha").addEventListener("input", e => {
+  const n = forcaSenha(e.target.value);
+  $$("#forca i").forEach((i, k) => i.className = k < n ? "on" + n : "");
+  const rot = ["", "fraca", "razoável", "boa", "forte"][n];
+  $("#recSenha").textContent = e.target.value ? "Senha " + rot + "." : "";
+  $("#recSenha").className = "recado" + (n >= 2 ? " ok" : n ? " erro" : "");
+});
+
+$("#formEntrar").addEventListener("submit", e => {
+  e.preventDefault();
+  const email = $("#eEmail").value.trim().toLowerCase(), senha = $("#eSenha").value;
+  const rec = $("#recEntrar");
+  if (!emailOk(email)) return falha(rec, "Digite um e-mail válido.", "#eEmail");
+  if (!senha) return falha(rec, "Digite sua senha.", "#eSenha");
+  const c = contas().find(x => x.email === email);
+  if (!c || c.hash !== hashSenha(senha, c.sal))
+    return falha(rec, "E-mail ou senha não confere.", "#eSenha");
+  rec.textContent = ""; rec.className = "recado";
+  entrarComo(c, $("#lembrar").checked);
+});
+$("#formCriar").addEventListener("submit", e => {
+  e.preventDefault();
+  const nome = $("#cNome").value.trim(), email = $("#cEmail").value.trim().toLowerCase();
+  const s1 = $("#cSenha").value, s2 = $("#cSenha2").value, rec = $("#recCriar");
+  if (nome.length < 2) return falha(rec, "Escreva seu nome.", "#cNome");
+  if (!emailOk(email)) return falha(rec, "Digite um e-mail válido.", "#cEmail");
+  if (contas().some(x => x.email === email))
+    return falha(rec, "Já existe uma conta com esse e-mail. Use a aba Entrar.", "#cEmail");
+  if (s1.length < 6) return falha(rec, "A senha precisa de pelo menos 6 caracteres.", "#cSenha");
+  if (s1 !== s2) return falha(rec, "As duas senhas não são iguais.", "#cSenha2");
+  if (!$("#cAceite").checked) return falha(rec, "Você precisa aceitar os termos para continuar.", "#cAceite");
+  const sal = novoSal();
+  const conta = { id:"u" + Date.now().toString(36), nome, email, sal, hash:hashSenha(s1, sal),
+                  pessoas:S.pessoas || 2, criada:new Date().toISOString() };
+  gravaContas([...contas(), conta]);
+  rec.textContent = ""; rec.className = "recado";
+  entrarComo(conta, true);
+});
+function falha(rec, msg, foco){
+  rec.innerHTML = `<span aria-hidden="true">⚠</span><span>${esc(msg)}</span>`;
+  rec.className = "recado erro";
+  const el = foco && $(foco); if (el){ el.classList.add("ruim"); el.focus(); }
+  return false;
+}
+$$("#formEntrar input, #formCriar input").forEach(i =>
+  i.addEventListener("input", () => i.classList.remove("ruim")));
+
+/* O visitante também tem a sessão guardada: sem isso a lista dele morre a cada
+   recarga, que é justamente o problema que a v2 veio resolver. */
+$("#btVisitante").addEventListener("click", () => {
+  entrarComo({ id:"visitante", nome:"Visitante", email:"", visitante:true, pessoas:2 }, true);
+});
+$("#esqueci").addEventListener("click", () => {
+  const rec = $("#recEntrar");
+  rec.innerHTML = `<span aria-hidden="true">ℹ</span><span>Num sistema real enviaríamos um link por
+    e-mail. Neste protótipo, use "Continuar sem conta" ou crie outra conta.</span>`;
+  rec.className = "recado";
+});
+$("#sair").addEventListener("click", () => {
+  Armazem.apaga("sessao");
+  USUARIO = null; S = ESTADO_ZERO();
+  $("#formEntrar").reset(); $("#formCriar").reset();
+  ir("#/entrar", true);
+});
+
+/* ══════════ ONDE VOCÊ ESTÁ ═══════════════════════════════ */
+function desenharOnde(){
+  const tem = S.cesta.length > 0;
+  $("#tagCasa").textContent = tem
+    ? `Sua cesta: ${S.cesta.length} produtos · ${real(total())}` : "Planejar a compra";
+  $("#localMercado").classList.toggle("travado", !tem);
+  $("#tagMercado").textContent = tem
+    ? `${pendentes().length} itens pra pegar` : "Monte a lista em casa primeiro";
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-vai]"); if (!b) return;
+  const destino = b.dataset.vai;
+  if (destino === "mercado"){
+    if (!S.cesta.length) return ir("#/casa/plano");
+    return ir("#/mercado/rota");
+  }
+  ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
+});
+$("#troca").addEventListener("click", e => {
+  const b = e.target.closest("[data-modo]"); if (!b) return;
+  if (b.dataset.modo === "mercado"){
+    if (!S.cesta.length) return ir("#/casa/plano");
+    return ir("#/mercado/rota");
+  }
+  ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-rota]");
+  if (b && !b.disabled) ir(b.dataset.rota);
+});
+
+/* ══════════ CASA · PLANO ═════════════════════════════════ */
+function desenharPlano(){
+  if (S.orcamento) $("#orc").value = formataMoeda(String(Math.round(S.orcamento * 100)));
+  marcarPilulas();
+  resumoPerfil();
+  previaPlano();
+}
+function formataMoeda(digitos){
+  const n = digitos.replace(/\D/g, "");
+  if (!n) return "";
+  return "R$ " + (+n / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+$("#orc").addEventListener("input", e => {
+  const n = e.target.value.replace(/\D/g, "");
+  e.target.value = formataMoeda(n);
+  S.orcamento = n ? +n / 100 : null;
+  $$('[data-guarda=orcAtalho] button').forEach(b => b.setAttribute("aria-pressed", "false"));
+  previaPlano(); salvar();
+});
+function resumoPerfil(){
+  const r = S.restricoes.length ? " · " + S.restricoes.length + " restrição(ões)" : "";
+  const e = S.extras.length ? " · " + S.extras.length + " essencial(is) seu(s)" : "";
+  $("#perfilResumo").textContent =
+    `— ${S.pessoas} ${S.pessoas > 1 ? "pessoas" : "pessoa"} · ${S.dias} dias${r}${e}`;
+}
+function previaPlano(){
+  const piso = pisoAbsoluto(), ideal = compraIdeal(), rec = $("#recOrc");
+  const alvo = $("#previaPlano"), bt = $("#btMontar");
+  if (!S.orcamento){
+    rec.textContent = ""; rec.className = "recado";
+    alvo.innerHTML = ""; bt.disabled = true; return;
+  }
+  if (S.orcamento < piso){
+    rec.innerHTML = `<span aria-hidden="true">⚠</span><span>Abaixo do mínimo possível:
+      uma unidade de cada item essencial, na marca mais barata, já custa ${real(piso)}.</span>`;
+    rec.className = "recado erro"; alvo.innerHTML = ""; bt.disabled = true; return;
+  }
+  rec.textContent = ""; rec.className = "recado";
+  bt.disabled = false;
+  bt.textContent = S.montada ? "Atualizar minha cesta" : "Montar minha cesta";
+
+  const folga = S.orcamento - ideal;
+  alvo.innerHTML = `<div class="previa">
+    <div><div class="r">Compra ideal pro seu perfil</div><div class="n">${real(ideal)}</div>
+      <div class="mini">${S.pessoas} ${S.pessoas > 1 ? "pessoas" : "pessoa"} · ${S.dias} dias · marca mais barata</div></div>
+    <div><div class="r">${folga >= 0 ? "Sobra pra melhorar as marcas" : "Vai faltar"}</div>
+      <div class="n" style="color:${folga >= 0 ? "var(--verde-esc)" : "var(--alerta)"}">${real(Math.abs(folga))}</div>
+      <div class="mini">${folga >= 0
+        ? "dá pra subir de marca ou levar extras"
+        : "o Pila vai reduzir quantidades pra caber"}</div></div>
+  </div>`;
+}
+$("#btMontar").addEventListener("click", () => { montarCesta(); ir("#/casa/cesta"); });
+
+/* ══════════ CASA · CESTA ═════════════════════════════════ */
+function textoCesta(){
+  const econ = economia();
+  $("#subCesta").innerHTML = `${S.cesta.length} produtos · <b>${real(total())}</b> de ${real(S.orcamento)}. ` +
+    (econ > .5 ? `Você economiza <b>${real(econ)}</b> em relação às marcas mais vendidas.`
+     : econ < -.5 ? `Você paga <b>${real(-econ)}</b> a mais que as marcas mais vendidas.`
+     : `Troque o filtro abaixo para comparar marcas.`);
+}
+function desenharPainelAjuste(){
+  const a = S.ajuste, alvo = $("#painelAjuste");
+  if (!a || !a.ativo){ alvo.innerHTML = ""; return; }
+  const pontos = [];
+  if (a.marcas) pontos.push(`Trocamos <b>${a.marcas}</b> ${a.marcas > 1 ? "itens" : "item"} pela versão mais barata.`);
+  if (a.quantidades.length) pontos.push(`Reduzimos a quantidade de <b>${a.quantidades.length}</b>
+    ${a.quantidades.length > 1 ? "produtos" : "produto"}.`);
+  if (a.removidos.length) pontos.push(`Tiramos: <b>${a.removidos.map(esc).join(", ")}</b>.`);
+  pontos.push(`Nenhuma categoria essencial saiu da cesta.`);
+
+  alvo.innerHTML = `<div class="ajuste">
+    <h3>O que fizemos pra caber em ${real(S.orcamento)}</h3>
+    <p class="mini" style="color:var(--amarelo-esc);font-weight:600">Sem isso, sua cesta sairia por ${real(totalPleno())}.</p>
+    <ul>${pontos.map(p => `<li><span>${p}</span></li>`).join("")}</ul>
+    <div class="linha-btn" style="margin-top:14px">
+      <button class="btn btn-n" id="btDesfazer">Desfazer e ver a cesta cheia</button>
+    </div>
+  </div>` + (a.insuficiente ? `<div class="erro-caixa">
+    <h3><span aria-hidden="true">⚠</span> Esse orçamento não fecha o essencial</h3>
+    <p>Mesmo com tudo na marca mais barata e uma unidade de cada item, a cesta essencial
+      custa ${real(pisoAbsoluto())}. A gente prefere te avisar a entregar uma cesta furada.</p></div>` : "");
+
+  const bt = $("#btDesfazer");
+  if (bt) bt.addEventListener("click", () => {
+    desfazerAjuste(); desenharPainelAjuste(); desenharCatalogo(); textoCesta();
+    atualizarBarra(); desenharGaveta();
+  });
+}
+const totalPleno = () => S.cesta.reduce((s, i) =>
+  s + escolher(i.g, S.filtro).p * (i.qtdPlena || i.qtd), 0);
+
+function desenharAbas(){
+  const usados = [...new Set(D.grupos.filter(g => resolver(g.id) === g.id).map(g => g.corredor))]
+    .sort((a, b) => a - b);
+  $("#abas").innerHTML =
+    `<button data-aba="todos" aria-pressed="${S.aba === "todos"}">Tudo</button>` +
+    `<button data-aba="carrinho" aria-pressed="${S.aba === "carrinho"}">Na cesta (${S.cesta.length})</button>` +
+    usados.map(n => `<button data-aba="${n}" aria-pressed="${S.aba == n}">${n} · ${CORR[n].nome}</button>`).join("");
+}
+$("#abas").addEventListener("click", e => {
+  const b = e.target.closest("[data-aba]"); if (!b) return;
+  S.aba = b.dataset.aba; desenharAbas(); desenharCatalogo(); salvar();
+});
+
+function desenharCatalogo(){
+  const busca = S.busca.trim().toLowerCase();
+  let grupos = D.grupos.filter(g => permitido(g.id));
+  if (S.aba === "carrinho") grupos = grupos.filter(g => noCarrinho(g.id));
+  else if (S.aba !== "todos") grupos = grupos.filter(g => g.corredor == S.aba);
+  if (busca) grupos = grupos.filter(g =>
+    g.nome.toLowerCase().includes(busca) ||
+    (escolher(g.id, S.filtro)?.m || "").toLowerCase().includes(busca));
+
+  if (!grupos.length){
+    $("#catalogo").innerHTML = `<div class="vazio"><p>Nada encontrado para
+      "<b>${esc(S.busca)}</b>". Tente outro termo ou volte para "Tudo".</p></div>`;
+    return;
+  }
+  const porCorr = {};
+  grupos.forEach(g => (porCorr[g.corredor] = porCorr[g.corredor] || []).push(g));
+
+  $("#catalogo").innerHTML = Object.keys(porCorr).map(Number).sort((a, b) => a - b).map(n => `
+    <section class="corredor">
+      <header><div class="numero">${n}</div>
+        <div><h3>${CORR[n].nome}</h3><div class="mini">${CORR[n].desc}</div></div>
+        <div class="mini">${porCorr[n].length} produtos</div></header>
+      ${porCorr[n].map(g => linhaProduto(g)).join("")}
+    </section>`).join("");
+}
+function linhaProduto(g){
+  const it = noCarrinho(g.id), p = it ? produtoDe(it) : escolher(g.id, S.filtro);
+  const pm = porMedida(g.id, p.p);
+  const selos = [];
+  if (g.essencial) selos.push(`<span class="selo essencial">essencial</span>`);
+  if (it && it.trocado) selos.push(`<span class="selo trocado">no lugar de ${esc(GRUPO[it.trocado].nome.toLowerCase())}</span>`);
+  if (it && it.eco) selos.push(`<span class="selo eco">versão econômica</span>`);
+  if (it && it.daReceita) selos.push(`<span class="selo novo">da receita</span>`);
+  return `<div class="item ${it ? "escolhido" : ""}">
+    <div class="nome">${esc(g.nome)}</div>
+    <div class="preco">${real(p.p)}</div>
+    <div class="meta"><span>${esc(p.m)}</span><span>·</span><span>${esc(g.un)}</span>
+      ${pm ? `<span>·</span><span class="kg">${pm}</span>` : ""}
+      <span class="gond">${g.gond}</span></div>
+    <div class="passador">
+      <button data-menos="${g.id}" aria-label="Tirar um ${esc(g.nome)}">−</button>
+      <span class="n ${it ? "" : "zero"}" aria-label="${it ? it.qtd : 0} na cesta">${it ? it.qtd : 0}</span>
+      <button class="mais" data-mais="${g.id}" aria-label="Adicionar ${esc(g.nome)}">+</button>
+    </div>
+    ${selos.length ? `<div class="selos">${selos.join("")}</div>` : ""}
+  </div>`;
+}
+$("#catalogo").addEventListener("click", e => {
+  const mais = e.target.closest("[data-mais]"), menos = e.target.closest("[data-menos]");
+  if (!mais && !menos) return;
+  const gid = (mais || menos).dataset[mais ? "mais" : "menos"];
+  const it = noCarrinho(gid);
+  if (mais){
+    if (it){ it.qtd++; it.qtdPlena = it.qtd; }
+    else S.cesta.push({ g:gid, qtd:qtdPara(gid), qtdPlena:qtdPara(gid),
+                        protegido:!!GRUPO[gid].essencial, trocado:null, eco:false });
+  } else if (it){
+    it.qtd--; it.qtdPlena = it.qtd;
+    if (it.qtd <= 0) S.cesta = S.cesta.filter(i => i.g !== gid);
+  }
+  desenharCatalogo(); desenharAbas(); atualizarBarra(); desenharGaveta(); textoCesta();
+  desenharTrilha(2); salvar();
+});
+$("#busca").addEventListener("input", e => { S.busca = e.target.value; desenharCatalogo(); });
+
+/* ══════════ CASA · RECEITAS ══════════════════════════════ */
+/* custo = preço do pacote × fração que a receita consome (o campo f vem dos dados) */
+function custoReceita(r){
+  return r.ing.reduce((s, ing) => { const f = resolver(ing[0]); if (!f) return s;
+    return s + escolher(f, S.filtro).p * ing[3]; }, 0);
+}
+function receitasVisiveis(){
+  return D.receitas
+    .filter(r => r.ing.every(i => resolver(i[0])))
+    .filter(r => S.tipoRec === "todos" || r.tipo === S.tipoRec)
+    .map(r => { const ing = r.ing.map(i => resolver(i[0]));
+      return { ...r, tem:ing.filter(g => noCarrinho(g)).length, n:ing.length }; })
+    .sort((a, b) => b.tem / b.n - a.tem / a.n || a.tempo - b.tempo);
+}
+function desenharReceitas(){
+  const rs = receitasVisiveis();
+  marcarPilulas();
+  $("#listaReceitas").innerHTML = rs.length ? rs.map(r => {
+    const pct = Math.round(r.tem / r.n * 100);
+    return `<button class="receita" data-rec="${esc(r.nome)}">
+      <span class="tipo">${r.tipo}</span>
+      <span class="tit">${esc(r.nome)}</span>
+      <span class="dados">${r.porcoes} porções · ${r.tempo} min</span>
+      <span class="trilho" role="img"
+        aria-label="${r.tem} de ${r.n} ingredientes na cesta"><i style="width:${pct}%"></i></span>
+      <span class="pron">${r.tem} de ${r.n} ingredientes você já tem</span>
+      <span class="rodape-cart">
+        <span class="valor">${real(custoReceita(r))}<small>ingredientes usados</small></span>
+        <span class="abrir">Ver ingredientes →</span>
+      </span>
+    </button>`; }).join("")
+    : `<div class="vazio"><p>Nenhuma receita nesse filtro combina com as suas restrições.</p></div>`;
+}
+/* O detalhe só existe quando a pessoa toca no cartão — a lista fica limpa. */
+$("#listaReceitas").addEventListener("click", e => {
+  const b = e.target.closest("[data-rec]"); if (!b) return;
+  S.receita = b.dataset.rec; salvar(); ir("#/casa/receita");
+});
+
+/* 0.3 → "0,3" · 2 → "2" — quantidade de receita em português */
+const nq = n => (Math.round(n * 100) / 100).toString().replace(".", ",");
+
+function ingredientesDe(r){
+  return r.ing.map(ing => {
+    const f = resolver(ing[0]); if (!f) return null;
+    return { g:f, q:ing[1], med:ing[2], frac:ing[3], tem:!!noCarrinho(f),
+             p:escolher(f, S.filtro), orig:ing[0] };
+  }).filter(Boolean);
+}
+function linhaIngrediente(l){
+  const g = GRUPO[l.g];
+  const trocado = l.orig !== l.g
+    ? `<div class="selos"><span class="selo trocado">no lugar de
+       ${esc(GRUPO[l.orig].nome.toLowerCase())}</span></div>` : "";
+  if (l.tem) return `<div class="item escolhido">
+    <div class="nome">${esc(g.nome)}</div>
+    <div class="preco" style="font-size:19px;color:var(--verde-esc)">✓</div>
+    <div class="meta"><span class="usa">usa ${nq(l.q)} ${esc(l.med)}</span>
+      <span>${esc(l.p.m)}</span></div>
+    ${trocado}</div>`;
+  /* aqui o selo mostra corredor E gôndola: fora do agrupamento por corredor,
+     "B3" sozinho não localiza nada — a mesma gôndola se repete em cada corredor */
+  return `<div class="item">
+    <div class="nome">${esc(g.nome)}</div>
+    <div class="preco">${real(l.p.p)}</div>
+    <div class="meta"><span class="usa">usa ${nq(l.q)} ${esc(l.med)}</span>
+      <span>${esc(l.p.m)}</span>
+      <span class="gond" title="Corredor ${g.corredor}, gôndola ${g.gond}">${g.corredor} · ${g.gond}</span></div>
+    <div class="passador"><button class="mais" data-mais="${g.id}"
+      aria-label="Adicionar ${esc(g.nome)} à cesta">+</button></div>
+    ${trocado}</div>`;
+}
+function desenharDetalheReceita(){
+  const r = D.receitas.find(x => x.nome === S.receita);
+  if (!r) return;
+  const linhas = ingredientesDe(r);
+  const faltam = linhas.filter(l => !l.tem), tem = linhas.filter(l => l.tem);
+  const custoPacotes = faltam.reduce((s, l) => s + l.p.p, 0);
+  const corrFalta = new Set(faltam.map(l => GRUPO[l.g].corredor)).size;
+
+  $("#detalheReceita").innerHTML = `
+    <div class="cabec">
+      <span class="receita-tipo">${r.tipo}</span>
+      <h1>${esc(r.nome)}</h1>
+      <p class="sub">${r.porcoes} porções · ${r.tempo} minutos ·
+        <b>${real(custoReceita(r) / r.porcoes)}</b> por porção</p>
+    </div>
+    <div class="resumo">
+      <div><div class="r">Você já tem</div>
+        <div class="v" style="color:var(--verde-esc)">${tem.length}</div></div>
+      <div><div class="r">Falta comprar</div>
+        <div class="v" style="color:${faltam.length ? "var(--vm)" : "var(--verde-esc)"}">${faltam.length}</div></div>
+      <div><div class="r">Ingredientes usados</div><div class="v">${real(custoReceita(r))}</div></div>
+      ${faltam.length ? `<div><div class="r">Pacotes que faltam</div>
+        <div class="v">${real(custoPacotes)}</div></div>` : ""}
+    </div>
+
+    ${faltam.length ? `
+    <section class="grupo-ing falta">
+      <header><span class="ic" aria-hidden="true">＋</span>
+        <h3>Falta comprar</h3>
+        <span class="cont">${faltam.length} ${faltam.length > 1 ? "itens" : "item"}</span></header>
+      ${faltam.map(linhaIngrediente).join("")}
+    </section>
+    <div class="linha-btn" style="margin-top:0;margin-bottom:18px">
+      <button class="btn btn-p btn-bloco" id="addFalta">${faltam.length > 1
+        ? `Adicionar os ${faltam.length} que faltam · ${real(custoPacotes)}`
+        : `Adicionar ${esc(GRUPO[faltam[0].g].nome.toLowerCase())} · ${real(custoPacotes)}`}</button>
+    </div>
+    <p class="mini" style="margin:-8px 0 20px">${faltam.length > 1 ? "Estão" : "Está"} em ${corrFalta}
+      ${corrFalta > 1 ? "corredores" : "corredor"} — ${faltam.length > 1 ? "entram" : "entra"}
+      na sua rota do modo mercado.</p>` : `
+    <div class="tudo-pronto">
+      <span class="ic" aria-hidden="true">✓</span>
+      <span><b>Tudo pronto</b><span>Os ${tem.length} ingredientes já estão na sua cesta.</span></span>
+    </div>`}
+
+    ${tem.length ? `
+    <section class="grupo-ing tem">
+      <header><span class="ic" aria-hidden="true">✓</span>
+        <h3>Já na sua cesta</h3>
+        <span class="cont">${tem.length} ${tem.length > 1 ? "itens" : "item"}</span></header>
+      ${tem.map(linhaIngrediente).join("")}
+    </section>` : ""}
+
+    <p class="mini">O custo acima é só do que a receita <b>consome</b>
+      (${real(custoReceita(r))}). No mercado você leva <b>pacotes inteiros</b> — o resto sobra
+      pra outras receitas.</p>`;
+
+  const add = $("#addFalta");
+  if (add) add.addEventListener("click", () => {
+    faltam.forEach(l => { if (!noCarrinho(l.g))
+      S.cesta.push({ g:l.g, qtd:1, qtdPlena:1, protegido:false, trocado:null,
+                     eco:false, daReceita:true }); });
+    salvar(); atualizarBarra(); desenharTrilha(3); desenharDetalheReceita();
+  });
+}
+/* o + de cada ingrediente que falta adiciona só aquele item */
+$("#v-receita").addEventListener("click", e => {
+  const b = e.target.closest("[data-mais]"); if (!b) return;
+  const gid = b.dataset.mais;
+  if (!noCarrinho(gid))
+    S.cesta.push({ g:gid, qtd:1, qtdPlena:1, protegido:!!GRUPO[gid].essencial,
+                   trocado:null, eco:false, daReceita:true });
+  salvar(); atualizarBarra(); desenharTrilha(3); desenharDetalheReceita();
+});
+
+/* ══════════ CASA · PRONTO ════════════════════════════════ */
+function desenharPronto(){
+  const porCorr = agrupaPorCorredor(S.cesta);
+  $("#listaPronto").innerHTML = Object.keys(porCorr).map(Number).sort((a, b) => a - b).map(n => {
+    const itens = porCorr[n];
+    const soma = itens.reduce((s, i) => s + subtotal(i), 0);
+    return `<section class="corredor">
+      <header><div class="numero">${n}</div>
+        <div><h3>${CORR[n].nome}</h3><div class="mini">${CORR[n].desc}</div></div>
+        <div class="mini">${itens.length} ${itens.length > 1 ? "itens" : "item"}<br>${real(soma)}</div></header>
+      ${itens.map(i => { const p = produtoDe(i), g = GRUPO[i.g];
+        const selos = [];
+        if (i.protegido) selos.push(`<span class="selo essencial">essencial</span>`);
+        if (i.trocado) selos.push(`<span class="selo trocado">no lugar de ${esc(GRUPO[i.trocado].nome.toLowerCase())}</span>`);
+        if (i.eco) selos.push(`<span class="selo eco">versão econômica</span>`);
+        if (i.daReceita) selos.push(`<span class="selo novo">da receita</span>`);
+        return `<div class="item">
+          <div class="nome">${esc(g.nome)}</div>
+          <div class="preco">${real(p.p * i.qtd)}</div>
+          <div class="meta"><span>${esc(p.m)}</span><span>·</span>
+            <span><b>${i.qtd} ${esc(g.un)}</b></span><span>·</span><span>${real(p.p)} cada</span>
+            <span class="gond">${g.gond}</span></div>
+          ${selos.length ? `<div class="selos">${selos.join("")}</div>` : ""}
+        </div>`; }).join("")}
+    </section>`; }).join("");
+
+  const cont = {}; S.cesta.forEach(i => { const n = GRUPO[i.g].corredor; cont[n] = (cont[n] || 0) + 1; });
+  const set = new Set(Object.keys(cont).map(Number));
+  $("#planta").innerHTML = `<div class="porta">Entrada</div>` +
+    D.corredores.map(c => `<div class="vaga ${set.has(c.n) ? "on" : ""}">
+      <div class="n">${c.n}</div><div class="t">${c.nome}</div>
+      ${cont[c.n] ? `<div class="c">${cont[c.n]}</div>` : ""}</div>`).join("") +
+    `<div class="porta">Caixas</div>`;
+  $("#rotaMini").textContent =
+    `${set.size} de ${D.corredores.length} corredores · o modo mercado te guia na ordem`;
+
+  const econ = economia();
+  $("#subPronto").innerHTML = `${S.cesta.length} produtos, ${unidades()} unidades,
+    <b>${real(total())}</b> de ${real(S.orcamento)}. ` +
+    (econ > .5 ? `Economia de <b>${real(econ)}</b> contra as marcas mais vendidas.` : "");
+  $("#avisoPronto").innerHTML = S.ajuste && S.ajuste.insuficiente ? `<div class="erro-caixa">
+    <h3><span aria-hidden="true">⚠</span> Orçamento apertado</h3>
+    <p>Não deu pra fechar o essencial dentro de ${real(S.orcamento)}. A cesta abaixo é o mais
+      próximo possível: ${real(total())}.</p></div>` : "";
+}
+function agrupaPorCorredor(lista){
+  const m = {};
+  lista.forEach(i => (m[GRUPO[i.g].corredor] = m[GRUPO[i.g].corredor] || []).push(i));
+  Object.values(m).forEach(l => l.sort((a, b) => GRUPO[a.g].gond.localeCompare(GRUPO[b.g].gond)));
+  return m;
+}
+const unidades = () => S.cesta.reduce((s, i) => s + i.qtd, 0);
+
+/* ══════════ MERCADO · ROTA ═══════════════════════════════ */
+const estadoItem = i => i.pego ? "pego" : (i.faltou ? "faltou" : "aberto");
+const pendentes = () => S.cesta.filter(i => estadoItem(i) === "aberto");
+const noCarrinhoReal = () => S.cesta.filter(i => i.pego);
+const totalReal = () => noCarrinhoReal().reduce((s, i) => s + subtotal(i), 0);
+
+function corredoresDaRota(){
+  return [...new Set(S.cesta.map(i => GRUPO[i.g].corredor))].sort((a, b) => a - b);
+}
+function corredorPronto(n){
+  return S.cesta.filter(i => GRUPO[i.g].corredor === n).every(i => estadoItem(i) !== "aberto");
+}
+function desenharRota(){
+  /* Cada toque redesenha a tela inteira. Sem guardar o que estava aberto e onde a
+     página estava, marcar um item fechava o painel da lista e pulava a rolagem. */
+  const rolagem = window.scrollY;
+  const rota = corredoresDaRota();
+  if (!rota.length){ $("#rotaCorpo").innerHTML = `<div class="vazio">
+    <p>Sua lista está vazia.</p><button class="btn btn-v" data-rota="#/casa/plano">Montar em casa</button>
+    </div>`; return; }
+
+  if (!rota.includes(S.corredorAtual)) S.corredorAtual = rota.find(n => !corredorPronto(n)) ?? rota[0];
+  const n = S.corredorAtual, pos = rota.indexOf(n);
+  const itens = (agrupaPorCorredor(S.cesta)[n] || []);
+  const abertos = itens.filter(i => estadoItem(i) === "aberto").length;
+
+  $("#rotaCorpo").innerHTML = `
+    <div class="tira-corr" id="tiraCorr" role="group" aria-label="Corredores da sua rota">
+      ${rota.map(c => `<button data-corr="${c}" ${c === n ? 'aria-current="true"' : ""}
+        class="${corredorPronto(c) ? "pronto" : ""}"
+        aria-label="Corredor ${c}, ${CORR[c].nome}">${c}</button>`).join("")}
+    </div>
+    <section class="corredor-atual">
+      <header>
+        <div class="numero">${n}</div>
+        <div><h2>${CORR[n].nome}</h2><div class="d">${CORR[n].desc}</div></div>
+        <div class="cnt">${pos + 1}º de ${rota.length}<br>${abertos ? abertos + " a pegar" : "tudo pego ✓"}</div>
+      </header>
+      ${itens.map(i => linhaPegar(i)).join("")}
+    </section>
+    <div class="nav-corr">
+      <button class="btn btn-n btn-g" id="corrAnt" ${pos === 0 ? "disabled" : ""}>← Anterior</button>
+      <button class="btn ${abertos ? "btn-n" : "btn-v"} btn-g" id="corrProx">
+        ${pos === rota.length - 1 ? "Ir para o caixa →" : "Próximo corredor →"}</button>
+    </div>
+    <details class="dobra" id="dobraBusca"${S.abreBusca ? " open" : ""}>
+      <summary>Esqueci um item — buscar no mercado inteiro</summary>
+      <div class="corpo">
+        <input class="busca" id="buscaMerc" type="search" style="margin-top:14px"
+               placeholder="arroz, café, sabão…" aria-label="Buscar produto para adicionar">
+        <div id="resBuscaMerc"></div>
+      </div>
+    </details>
+    <details class="dobra" id="dobraLista"${S.abreLista ? " open" : ""}>
+      <summary>Ver a lista inteira (${S.cesta.length} produtos)</summary>
+      <div class="corpo" id="listaToda"></div>
+    </details>`;
+
+  const toda = $("#listaToda");
+  const porC = agrupaPorCorredor(S.cesta);
+  toda.innerHTML = Object.keys(porC).map(Number).sort((a, b) => a - b).map(c => `
+    <section class="corredor" style="margin-top:12px">
+      <header><div class="numero">${c}</div><div><h3>${CORR[c].nome}</h3></div>
+        <div class="mini">${porC[c].filter(i => i.pego).length}/${porC[c].length} pegos</div></header>
+      ${porC[c].map(i => linhaPegar(i)).join("")}
+    </section>`).join("");
+
+  $("#corrAnt").addEventListener("click", () => { S.corredorAtual = rota[pos - 1]; salvar(); desenharRota(); });
+  $("#corrProx").addEventListener("click", () => {
+    if (pos === rota.length - 1) return ir("#/mercado/pagar");
+    S.corredorAtual = rota[pos + 1]; salvar(); desenharRota();
+  });
+  $("#tiraCorr").addEventListener("click", e => {
+    const b = e.target.closest("[data-corr]"); if (!b) return;
+    S.corredorAtual = +b.dataset.corr; salvar(); desenharRota();
+  });
+  $("#dobraBusca").addEventListener("toggle", e => { S.abreBusca = e.target.open; salvar(); });
+  $("#dobraLista").addEventListener("toggle", e => { S.abreLista = e.target.open; salvar(); });
+  const bm = $("#buscaMerc");
+  bm.addEventListener("input", e => { S.buscaMerc = e.target.value; buscaNoMercado(e.target.value); });
+  if (S.buscaMerc){ bm.value = S.buscaMerc; buscaNoMercado(S.buscaMerc); }
+
+  atualizarBarra();   /* mantém a barra de baixo e o topo do mercado em sincronia */
+  if (rolagem) window.scrollTo(0, rolagem);
+}
+function linhaPegar(i){
+  const p = produtoDe(i), g = GRUPO[i.g], est = estadoItem(i);
+  const marca = est === "pego" ? "✓" : (est === "faltou" ? "✕" : "");
+  return `<div class="pegar-linha">
+    <button class="pegar" data-pega="${i.g}" data-estado="${est}"
+      aria-pressed="${est === "pego"}">
+      <span class="marca-cx" aria-hidden="true">${marca}</span>
+      <span class="txt">
+        <span class="n">${esc(g.nome)}</span>
+        <span class="m"><span class="gond">${g.gond}</span><span>${esc(p.m)}</span>
+          ${est === "faltou" ? `<span class="selo eco">não achei</span>` : ""}</span>
+      </span>
+      <span class="dir"><span class="vl">${real(p.p * i.qtd)}</span>
+        <span class="qt">${i.qtd} ${esc(g.un)}</span></span>
+    </button>
+    <button class="acao-item" data-faltou="${i.g}"
+      aria-label="${est === "faltou" ? "Desmarcar" : "Marcar como não encontrado"}: ${esc(g.nome)}"
+      title="Não achei">${est === "faltou" ? "↺" : "✕"}</button>
+  </div>`;
+}
+$("#v-rota").addEventListener("click", e => {
+  const pega = e.target.closest("[data-pega]"), faltou = e.target.closest("[data-faltou]");
+  if (pega){
+    const i = noCarrinho(pega.dataset.pega); if (!i) return;
+    if (i.pego){ i.pego = false; } else { i.pego = true; i.faltou = false; }
+    salvar(); desenharRota();
+  } else if (faltou){
+    const i = noCarrinho(faltou.dataset.faltou); if (!i) return;
+    if (i.faltou){ i.faltou = false; } else { i.faltou = true; i.pego = false; }
+    salvar(); desenharRota();
+  }
+});
+function buscaNoMercado(termo){
+  const t = termo.trim().toLowerCase(), alvo = $("#resBuscaMerc");
+  if (t.length < 2){ alvo.innerHTML = ""; return; }
+  const achados = D.grupos.filter(g => permitido(g.id) && !noCarrinho(g.id) &&
+    g.nome.toLowerCase().includes(t)).slice(0, 8);
+  alvo.innerHTML = achados.length ? achados.map(g => {
+    const p = escolher(g.id, S.filtro);
+    return `<div class="item">
+      <div class="nome">${esc(g.nome)}</div>
+      <div class="preco">${real(p.p)}</div>
+      <div class="meta"><span>${esc(p.m)}</span><span>·</span>
+        <span>corredor ${g.corredor} — ${esc(CORR[g.corredor].nome)}</span><span class="gond">${g.gond}</span></div>
+      <div class="passador"><button class="mais" data-addmerc="${g.id}"
+        aria-label="Adicionar ${esc(g.nome)} à lista">+</button></div>
+    </div>`; }).join("")
+    : `<p class="sub" style="margin-top:12px">Nada com "${esc(termo)}".</p>`;
+}
+$("#v-rota").addEventListener("click", e => {
+  const b = e.target.closest("[data-addmerc]"); if (!b) return;
+  const gid = b.dataset.addmerc;
+  S.cesta.push({ g:gid, qtd:1, qtdPlena:1, protegido:false, trocado:null, eco:false, daReceita:false });
+  S.corredorAtual = GRUPO[gid].corredor;
+  salvar(); desenharRota();
+});
+function atualizarMerc(){
+  const pegos = noCarrinhoReal().length, tot = S.cesta.length;
+  const faltou = S.cesta.filter(i => i.faltou).length;
+  $("#mercPegos").textContent = `${pegos} de ${tot} itens`;
+  $("#mercValor").textContent = `${real(totalReal())} no carrinho` +
+    (faltou ? ` · ${faltou} não ${faltou > 1 ? "achados" : "achado"}` : "");
+  $("#mercBarra").style.width = (tot ? (pegos + faltou) / tot * 100 : 0) + "%";
+}
+
+/* ══════════ MERCADO · PAGAMENTO ══════════════════════════ */
+function gerarCodigo(){
+  const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let c = ""; for (let i = 0; i < 4; i++) c += letras[Math.floor(Math.random() * letras.length)];
+  return "PLA-" + c + "-" + new Date().getFullYear();
+}
+function desenharPagamento(){
+  marcarPilulas();
+  const levados = noCarrinhoReal();
+
+  /* Nada marcado ainda: um QR de R$ 0,00 pareceria um app quebrado.
+     Melhor dizer o que falta fazer e mandar de volta pra lista. */
+  if (!levados.length){
+    $("#bilhete").innerHTML = `<div class="vazio" style="border:none;padding:24px 10px">
+      <p style="font-size:40px;margin-bottom:6px" aria-hidden="true">🛒</p>
+      <p>Você ainda não marcou nenhum item como pego.<br>
+        O QR do caixa é gerado a partir do que está de fato no seu carrinho.</p>
+      <button class="btn btn-v" data-rota="#/mercado/rota">Voltar e marcar os itens</button></div>`;
+    $("#resumoPedido").innerHTML =
+      `<li><span>Itens na lista</span><b>${S.cesta.length}</b></li>` +
+      `<li><span>Marcados como pegos</span><b>0</b></li>` +
+      `<li class="tot"><span>Total a pagar</span><b>${real(0)}</b></li>`;
+    $("#explicaCanal").textContent =
+      "Marque os itens no modo mercado e o código aparece aqui com o valor real da compra.";
+    return;
+  }
+
+  if (!S.codigo){ S.codigo = gerarCodigo(); salvar(); }
+  const t = totalReal(), un = levados.reduce((s, i) => s + i.qtd, 0);
+  const corr = new Set(levados.map(i => GRUPO[i.g].corredor)).size;
+  const validade = new Date(Date.now() + 864e5).toLocaleDateString("pt-BR");
+
+  /* O QR carrega o número do pedido, não o preço. Quem valida o valor é o PDV. */
+  const carga = "PILA|" + S.codigo + "|" + levados.length + "|" + validade +
+                "|" + (S.canal === "totem" ? "T" : "C");
+  let qr;
+  try { qr = QR.svg(carga, 250); }
+  catch (e) { qr = `<p class="sub">Não foi possível gerar o código: ${esc(e.message)}</p>`; }
+
+  $("#bilhete").innerHTML = `
+    <div class="mini" style="letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--vm)">
+      ${S.canal === "totem" ? "Totem de autoatendimento" : "Caixa com operador"}</div>
+    <div class="qr">${qr}</div>
+    <div class="cod">${S.codigo}</div>
+    <div class="val">${real(t)}</div>
+    <div class="mini">${levados.length} produtos · ${un} unidades</div>
+    <div class="exp">Válido até ${validade}<br>O código não carrega preço nem dado pessoal.</div>`;
+
+  const planejado = total(), naoAchou = S.cesta.filter(i => i.faltou);
+  $("#resumoPedido").innerHTML = `
+    <li><span>Produtos levados</span><b>${levados.length} de ${S.cesta.length}</b></li>
+    <li><span>Unidades</span><b>${un}</b></li>
+    <li><span>Corredores percorridos</span><b>${corr} de ${D.corredores.length}</b></li>
+    ${naoAchou.length ? `<li><span>Não encontrados na loja</span>
+      <b>${naoAchou.map(i => esc(GRUPO[i.g].nome)).join(", ")}</b></li>` : ""}
+    <li><span>Planejado em casa</span><b>${real(planejado)}</b></li>
+    <li><span>Orçamento definido</span><b>${real(S.orcamento)}</b></li>
+    <li><span>${t <= S.orcamento ? "Sobra do orçamento" : "Acima do orçamento"}</span>
+        <b style="color:${t <= S.orcamento ? "var(--verde-esc)" : "var(--alerta)"}">
+        ${real(Math.abs(S.orcamento - t))}</b></li>
+    <li class="tot"><span>Total a pagar</span><b>${real(t)}</b></li>`;
+
+  $("#explicaCanal").textContent = S.canal === "totem"
+    ? "No totem, o cliente encosta o QR no leitor, confere a lista na tela e paga por cartão ou Pix. Sem fila de operador."
+    : "No caixa, o operador lê o QR e todos os itens entram de uma vez. Sem bipar produto por produto, sem erro de digitação.";
+}
+$("#novaCompra").addEventListener("click", () => {
+  if (!confirm("Começar uma compra nova? A lista atual será apagada.")) return;
+  const perfil = { pessoas:S.pessoas, dias:S.dias, restricoes:S.restricoes, extras:S.extras,
+                   filtro:S.filtro, orcamento:S.orcamento };
+  S = Object.assign(ESTADO_ZERO(), perfil);
+  salvar(); ir("#/casa/plano");
+});
+
+/* ══════════ BARRA FIXA ═══════════════════════════════════ */
+function atualizarBarra(){
+  const mercado = S.modo === "mercado";
+  const t = mercado ? totalReal() : total();
+  const sobra = (S.orcamento || 0) - t;
+  const pct = S.orcamento ? Math.min(100, t / S.orcamento * 100) : 0;
+  $("#bRotTotal").textContent = mercado ? "No carrinho" : "Total";
+  $("#bTotal").textContent = real(t);
+  $("#bItens").textContent = mercado ? noCarrinhoReal().length : S.cesta.length;
+  $("#bSobra").textContent = real(Math.abs(sobra));
+  $("#bSobra").classList.toggle("neg", sobra < 0);
+  $("#bRotSobra").textContent = sobra < 0 ? "Passou" : "Sobra";
+  $("#bBarra").style.width = pct + "%";
+  $("#barra").classList.toggle("estourou", sobra < 0);
+  $("#bRotulo").textContent = !S.orcamento ? "Sem orçamento definido"
+    : sobra < 0 ? `⚠ Passou ${real(-sobra)} do orçamento`
+    : `${Math.round(pct)}% de ${real(S.orcamento)}`;
+
+  const bt = $("#bSeguir");
+  if (mercado){ bt.textContent = "Ir para o caixa"; bt.dataset.rota = "#/mercado/pagar"; }
+  else if (rotaAtual === "#/casa/cesta"){ bt.textContent = "Ver receitas"; bt.dataset.rota = "#/casa/receitas"; }
+  else { bt.textContent = "Finalizar lista"; bt.dataset.rota = "#/casa/pronto"; }
+
+  if (mercado) atualizarMerc();
+  desenharGaveta();
+}
+function desenharGaveta(){
+  const mercado = S.modo === "mercado";
+  const lista = mercado ? noCarrinhoReal() : S.cesta;
+  $("#gavetaLista").innerHTML = lista.length
+    ? lista.map(i => { const p = produtoDe(i), g = GRUPO[i.g];
+        return `<div class="l"><div class="nm"><b>${esc(g.nome)}</b>
+          <span>${esc(p.m)} · ${i.qtd} ${esc(g.un)} · corredor ${g.corredor} · gôndola ${g.gond}</span></div>
+          <div class="pr">${real(p.p * i.qtd)}</div>
+          ${mercado ? "" : `<button class="x" data-fora="${i.g}"
+            aria-label="Tirar ${esc(g.nome)} da cesta">×</button>`}</div>`; }).join("")
+    : `<p class="sub" style="padding:10px 0">${mercado ? "Nada marcado ainda." : "Cesta vazia."}</p>`;
+}
+$("#gavetaLista").addEventListener("click", e => {
+  const b = e.target.closest("[data-fora]"); if (!b) return;
+  S.cesta = S.cesta.filter(i => i.g !== b.dataset.fora);
+  salvar(); atualizarBarra(); desenharCatalogo(); desenharAbas(); textoCesta();
+  desenharTrilha(2);   /* o contador da trilha ficava preso no número antigo */
+  if (!S.cesta.length) ir("#/casa/plano");
+});
+$("#verCarrinho").addEventListener("click", () => {
+  const abriu = $("#gaveta").classList.toggle("aberta");
+  $("#verCarrinho").textContent = abriu ? "Fechar" : "Ver carrinho";
+});
+
+/* ══════════ PÍLULAS ══════════════════════════════════════ */
+function marcarPilulas(){
+  $$("[data-guarda]").forEach(grupo => {
+    const chave = grupo.dataset.guarda;
+    grupo.querySelectorAll("button").forEach(b => {
+      const v = b.dataset.v;
+      let on;
+      if (chave === "orcAtalho") on = S.orcamento === +v;
+      else if (grupo.dataset.multi) on = (S[chave] || []).includes(v);
+      else on = String(S[chave]) === v;
+      b.setAttribute("aria-pressed", String(!!on));
+    });
+  });
+}
+$$("[data-guarda]").forEach(grupo => {
+  grupo.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const chave = grupo.dataset.guarda, v = b.dataset.v;
+    if (grupo.dataset.multi){
+      const on = b.getAttribute("aria-pressed") === "true";
+      S[chave] = on ? S[chave].filter(x => x !== v) : [...S[chave], v];
+    } else if (chave === "orcAtalho"){
+      S.orcamento = +v; $("#orc").value = formataMoeda(String(v * 100));
+    } else {
+      S[chave] = isNaN(+v) ? v : +v;
+    }
+    marcarPilulas(); salvar();
+
+    if (["pessoas", "dias", "restricoes", "extras"].includes(chave)){
+      resumoPerfil(); previaPlano();
+      if (S.montada && S.cesta.length){ montarCesta(); desenharAbas(); desenharCatalogo();
+        desenharPainelAjuste(); textoCesta(); atualizarBarra(); }
+    }
+    if (chave === "orcAtalho") previaPlano();
+    /* AQUI ESTAVA O BUG PRINCIPAL DA v1: o filtro não valia nada porque os itens
+       ficavam presos na "versão econômica". Agora escolher o filtro desfaz o
+       rebaixamento — a escolha do usuário sempre ganha. */
+    if (chave === "filtro"){
+      S.cesta.forEach(i => i.eco = false);
+      S.ajuste = null; salvar();
+      desenharCatalogo(); desenharPainelAjuste(); textoCesta();
+      atualizarBarra(); desenharReceitas();
+    }
+    if (chave === "tipoRec"){ S.receita = null; $("#detalheReceita").innerHTML = ""; desenharReceitas(); }
+    if (chave === "canal") desenharPagamento();
+  });
+});
+
+/* ══════════ INÍCIO ═══════════════════════════════════════ */
+(function inicio(){
+  const sessao = Armazem.ler("sessao", null);
+  const c = sessao && (sessao === "visitante"
+    ? { id:"visitante", nome:"Visitante", email:"", visitante:true, pessoas:2 }
+    : contas().find(x => x.id === sessao));
+  if (c){ USUARIO = c; carregarEstado();
+    $("#euNome").textContent = c.nome.split(" ")[0];
+    $("#avatar").textContent = (c.nome.trim()[0] || "?").toUpperCase();
+    $("#saudacao").textContent = c.visitante
+      ? "Onde você está agora?" : `Oi, ${c.nome.split(" ")[0]}. Onde você está?`;
+    if (!location.hash || location.hash === "#/entrar")
+      return ir(S.cesta.length ? "#/onde" : "#/casa/plano", true);
+  } else if (location.hash && location.hash !== "#/entrar"){
+    return ir("#/entrar", true);
+  }
+  marcarPilulas();
+  rotear();
+})();
+</script>
+</body>
+</html>
