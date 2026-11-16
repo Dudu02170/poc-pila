@@ -71,6 +71,7 @@ export function scenario(name, body) {
       ]) {
         try { await writeFile(dir + '/' + file, await read()); } catch {}
       }
+      try { console.error('QA browser errors:', JSON.stringify(await driver.manage().logs().get('browser'))); console.error('QA URL:',await driver.getCurrentUrl()); } catch {}
       throw error;
     } finally { await driver.quit(); }
   });
