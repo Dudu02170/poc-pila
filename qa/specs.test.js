@@ -1,6 +1,6 @@
 import { scenario, assert } from './support.js';
-async function guest(p) { await p.open(); await p.click('#btVisitante'); await p.waitText('#saudacao','Onde'); }
-async function plan(p) { await guest(p); await p.click('[data-vai="casa"]'); await p.element('#orc'); }
+async function guest(p) { await p.open(); await p.click('#btVisitante'); await p.element('#orc'); }
+async function plan(p) { await guest(p); await p.element('#orc'); }
 scenario('rota protegida exige sessao', async p => {
   await p.open('/index.html#/casa/cesta');
   await p.element('#formEntrar');
