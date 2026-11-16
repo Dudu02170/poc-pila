@@ -27,11 +27,14 @@ scenario('orcamento abaixo do minimo impede montar cesta', async p => {
 });
 scenario('montar cesta respeita orcamento e permite recarregar', async p => {
   await plan(p); await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');
-  await p.click('#btMontar'); console.log('QA etapa: montar cesta'); await p.element('#catalogo');
+  await p.click('#btMontar'); await p.element('#catalogo');
   assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);
   const total=Number((await p.text('#bTotal')).replace(/[^0-9,]/g,'').replace(',','.'));
   assert.ok(Number.isFinite(total)&&total>0&&total<=1300,'cesta dentro do orçamento');
-  await p.driver.navigate().refresh(); console.log('QA etapa: recarregar cesta'); await p.element('#catalogo');
+  await p.driver.wait(() => p.driver.executeScript(`const saved=JSON.parse(localStorage.getItem('pila.estado.visitante')||'null');return saved?.cesta?.length>0&&saved.orcamento===1300;`),5000,'persistência assíncrona da cesta');
+  await p.driver.navigate().refresh(); await p.element('#catalogo');
+  const restored=Number((await p.text('#bTotal')).replace(/[^0-9,]/g,'').replace(',','.'));
+  assert.equal(restored,total,'recarga preserva o total');
   assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);
 });
 scenario('sair encerra sessao de visitante', async p => {
