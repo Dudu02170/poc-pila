@@ -61,7 +61,7 @@ scenario('cadastro valido permite sair e autenticar novamente sem duplicar conta
  assert.equal(accounts[0].email,'qa@example.test');
  assert.equal(accounts[0].nome,'Pessoa QA');
  assert.equal(await localSession(p),accounts[0].id);
- await p.click('#sair');await p.element('#formEntrar');
+ await p.click('#sair');await p.element('#abaEntrar');await p.click('#abaEntrar');await p.element('#formEntrar');
  assert.equal(await localSession(p),null);
  await p.fill('#eEmail','QA@EXAMPLE.TEST');await p.fill('#eSenha','Errada123!');
  await p.click('#btEntrar');await p.waitText('#recEntrar','E-mail ou senha não confere.');
@@ -78,7 +78,7 @@ scenario('cadastro valido permite sair e autenticar novamente sem duplicar conta
 scenario('cadastro duplicado normaliza maiusculas sem sobrescrever a conta',async p=>{
  await register(p);
  const accounts=await localAccounts(p);
- await p.click('#sair');await p.element('#formEntrar');await p.click('#abaCriar');
+ await p.click('#sair');await p.element('#abaEntrar');await p.click('#abaEntrar');await p.element('#formEntrar');await p.click('#abaCriar');
  for(const [id,value] of Object.entries({
   cNome:'Outra Pessoa QA',cEmail:'Qa@Example.Test',cSenha:'OutraSenha123!',cSenha2:'OutraSenha123!'
  })) await p.fill('#'+id,value);
@@ -94,5 +94,5 @@ scenario('cadastro sem aceite dos termos nao grava conta nem sessao',async p=>{
  await p.waitText('#recCriar','Você precisa aceitar os termos para continuar.');
  assert.deepEqual(await localAccounts(p),[]);
  assert.equal(await localSession(p),null);
- assert.match(await p.driver.getCurrentUrl(),/#\/entrar$/);
+ assert.equal(await (await p.element('#formCriar')).isDisplayed(),true);
 });
