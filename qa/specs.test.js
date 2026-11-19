@@ -96,3 +96,41 @@ scenario('cadastro sem aceite dos termos nao grava conta nem sessao',async p=>{
  assert.equal(await localSession(p),null);
  assert.equal(await (await p.element('#formCriar')).isDisplayed(),true);
 });
+
+const savedGuestBasket=p=>p.driver.executeScript("return JSON.parse(localStorage.getItem('pila.estado.visitante')||'null')");
+const visibleBasket=p=>p.driver.executeScript(`return Array.from(document.querySelectorAll('#catalogo .item.escolhido'),item=>({
+ g:item.querySelector('[data-mais]').dataset.mais,
+ name:item.querySelector('.nome').textContent,
+ price:item.querySelector('.preco').textContent,
+ qtd:Number(item.querySelector('.n').textContent)
+}))`);
+scenario('alterar quantidade preserva todos os itens e valores apos recarregar',async p=>{
+ await plan(p);await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');
+ await p.click('#btMontar');await p.element('#catalogo');
+ await p.driver.wait(async()=>{const saved=await savedGuestBasket(p);return saved?.cesta?.length>0&&saved.orcamento===1300;},
+ 5000,'persistência inicial da cesta');
+ const before=await savedGuestBasket(p),displayed=await visibleBasket(p);
+ assert.ok(displayed.length>0,'cesta inicial deve ter produtos visíveis');
+ const target=displayed[0],quantity=target.qtd+1;
+ assert.equal(before.cesta.find(i=>i.g===target.g).qtd,target.qtd);
+ const totalBefore=Number((await p.text('#bTotal')).replace(/[^0-9,]/g,'').replace(',','.'));
+ const unitPrice=Number(target.price.replace(/[^0-9,]/g,'').replace(',','.'));
+ await p.click('#catalogo [data-mais="'+target.g+'"]');
+ await p.driver.wait(async()=>{const saved=await savedGuestBasket(p);return saved?.cesta?.find(i=>i.g===target.g)?.qtd===quantity;},
+ 5000,'quantidade editada deve ser persistida antes da recarga');
+ const edited=await savedGuestBasket(p);
+ assert.equal(edited.cesta.length,before.cesta.length,'incrementar não deve duplicar o produto');
+ assert.equal(edited.cesta.find(i=>i.g===target.g).qtd,quantity);
+ assert.deepEqual(edited.cesta.filter(i=>i.g!==target.g),before.cesta.filter(i=>i.g!==target.g),
+  'alterar um produto não deve mudar os demais');
+ const expected=displayed.map(i=>i.g===target.g?{...i,qtd:quantity}:i);
+ assert.deepEqual(await visibleBasket(p),expected,'catálogo deve refletir a edição');
+ const editedTotal=Number((await p.text('#bTotal')).replace(/[^0-9,]/g,'').replace(',','.'));
+ assert.equal(Math.round(editedTotal*100),Math.round(totalBefore*100)+Math.round(unitPrice*100),
+  'uma unidade adicional deve somar exatamente seu preço');
+ await p.driver.navigate().refresh();await p.element('#catalogo');
+ assert.deepEqual((await savedGuestBasket(p)).cesta,edited.cesta,'armazenamento mantém todos os atributos dos itens');
+ assert.deepEqual(await visibleBasket(p),expected,'recarga deve restaurar itens, nomes, preços e quantidades');
+ assert.equal(await p.text('#bTotal'), 'R$ '+editedTotal.toFixed(2).replace('.',','));
+ assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);
+});
