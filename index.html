@@ -97,6 +97,10 @@ b,strong{font-weight:600}
 .topo{background:var(--vm);color:#fff;position:sticky;top:0;z-index:60;
   box-shadow:0 1px 0 rgba(0,0,0,.15);padding-top:env(safe-area-inset-top)}
 .topo[hidden]{display:none}
+#salvamentoAviso{background:#FFF1D6;color:#332C29;flex-wrap:wrap}
+#salvamentoAviso[hidden],#salvarNovamente[hidden]{display:none}
+#salvamentoAviso p{flex:1;min-width:200px;margin:0;font-size:14px}
+#salvarNovamente{font:inherit;padding:8px 12px;border:1px solid #665744;border-radius:8px;background:#fff;cursor:pointer}
 .topo .wrap{display:flex;align-items:center;gap:14px;padding:9px 18px;flex-wrap:wrap}
 .logo{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:30px;
   text-transform:uppercase;letter-spacing:.06em;line-height:1;
@@ -625,6 +629,9 @@ body.com-barra main{padding-bottom:150px}
       <span id="euNome"></span>
       <button id="sair">Sair</button>
     </div>
+  </div>
+  <div class="wrap" id="salvamentoAviso" role="alert" hidden>
+    <p id="salvamentoTexto"></p><button type="button" id="salvarNovamente">Tentar salvar lista</button>
   </div>
 </header>
 
@@ -1237,14 +1244,15 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 
 /* ── armazenamento local ──────────────────────────────────── */
 const Armazem = {
-  ok: (() => { try { localStorage.setItem("_t", "1"); localStorage.removeItem("_t"); return true; }
-               catch (e) { return false; } })(),
-  ler(chave, padrao){ if (!this.ok) return padrao;
+  ler(chave, padrao){
     try { const v = localStorage.getItem("pila." + chave); return v ? JSON.parse(v) : padrao; }
     catch (e) { return padrao; } },
-  grava(chave, valor){ if (!this.ok) return;
-    try { localStorage.setItem("pila." + chave, JSON.stringify(valor)); } catch (e) {} },
-  apaga(chave){ if (this.ok) localStorage.removeItem("pila." + chave); }
+  grava(chave, valor){
+    try { localStorage.setItem("pila." + chave, JSON.stringify(valor)); return true; }
+    catch (e) { return false; } },
+  apaga(chave){
+    try { localStorage.removeItem("pila." + chave); return true; }
+    catch (e) { return false; } }
 };
 
 /* Hash de senha. Num sistema real isso acontece NO SERVIDOR, com bcrypt ou argon2.
@@ -1271,18 +1279,32 @@ let S = ESTADO_ZERO();
 let USUARIO = null;
 
 let salvaTimer = null;
+let estadoPendente = false;
+function avisoSalvamento(texto, repetir = true){
+  $("#salvamentoTexto").textContent = texto;
+  $("#salvamentoAviso").hidden = !texto;
+  $("#salvarNovamente").hidden = !repetir;
+  medirTopo();
+}
 function salvarAgora(){
   clearTimeout(salvaTimer);
   salvaTimer = null;
   const { busca, ...resto } = S;
-  Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
+  const gravou = Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
+  estadoPendente = !gravou;
+  avisoSalvamento(gravou ? "" : "Não foi possível salvar a lista neste navegador. As alterações estão só na memória desta aba. Mantenha a aba aberta e tente novamente.");
+  return gravou;
 }
 function salvar(){
   clearTimeout(salvaTimer);
+  estadoPendente = true;
   salvaTimer = setTimeout(salvarAgora, 120);
 }
-addEventListener("pagehide", () => { if (salvaTimer !== null) salvarAgora(); });
+$("#salvarNovamente").addEventListener("click", () => { if (USUARIO) salvarAgora(); });
+addEventListener("pagehide", () => { if (estadoPendente) salvarAgora(); });
 function carregarEstado(){
+  clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false;
+  avisoSalvamento("");
   const salvo = Armazem.ler("estado" + (USUARIO ? "." + USUARIO.id : ""), null);
   S = Object.assign(ESTADO_ZERO(), salvo || {});
   S.busca = "";
@@ -1597,8 +1619,11 @@ $("#esqueci").addEventListener("click", () => {
   rec.className = "recado";
 });
 $("#sair").addEventListener("click", () => {
-  if (salvaTimer !== null) salvarAgora();
-  Armazem.apaga("sessao");
+  if (estadoPendente && !salvarAgora()) return;
+  if (!Armazem.apaga("sessao")){
+    avisoSalvamento("Não foi possível encerrar a sessão local. Tente Sair novamente.", false); return;
+  }
+  avisoSalvamento("");
   USUARIO = null; S = ESTADO_ZERO();
   $("#formEntrar").reset(); $("#formCriar").reset();
   ir("#/entrar", true);

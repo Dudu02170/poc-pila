@@ -229,3 +229,46 @@ scenario('conta reutiliza lista sem marcacoes e sem alterar cesta do visitante',
  await p.click('#reutilizarLista');await p.alert(/Reutilizar esta lista/);await p.element('#catalogo');assert.deepEqual(await storedState(p,id),reusedState(before));assert.deepEqual(await savedGuestBasket(p),visitor);assert.equal(await localSession(p),id);
  await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await storedState(p,id),reusedState(before));assert.deepEqual(await savedGuestBasket(p),visitor);
 });
+
+async function failStateWrites(p,id='visitante'){
+ await p.driver.executeScript('const blocked=arguments[0],original=Storage.prototype.setItem;window.__qaStateSetItem=original;Storage.prototype.setItem=function(key,value){if(key===blocked)throw new DOMException("QA quota","QuotaExceededError");return original.call(this,key,value)}','pila.estado.'+id);
+}
+const restoreStateWrites=p=>p.driver.executeScript('Storage.prototype.setItem=window.__qaStateSetItem');
+const savedNoticeHidden=p=>p.driver.wait(()=>p.driver.executeScript('return document.getElementById("salvamentoAviso").hidden'),5000);
+const incrementedBasket=(before,g)=>before.cesta.map(i=>i.g===g?{...i,qtd:i.qtd+1,qtdPlena:i.qtd+1}:i);
+scenario('falha ao gravar lista avisa preserva memoria e permite tentar salvar novamente',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),displayed=await visibleBasket(p),target=before.cesta[0];
+ await failStateWrites(p);await p.click('#catalogo [data-mais="'+target.g+'"]');await p.waitText('#salvamentoAviso','só na memória desta aba');
+ assert.deepEqual(await savedGuestBasket(p),before);assert.deepEqual(await visibleBasket(p),displayed.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i));
+ await p.click('#salvarNovamente');await p.waitText('#salvamentoAviso','Não foi possível salvar');assert.deepEqual(await savedGuestBasket(p),before);
+ await restoreStateWrites(p);await p.click('#salvarNovamente');await savedNoticeHidden(p);
+ const expected=incrementedBasket(before,target.g);assert.deepEqual((await savedGuestBasket(p)).cesta,expected);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual((await savedGuestBasket(p)).cesta,expected);assert.deepEqual(await visibleBasket(p),displayed.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i));
+});
+scenario('sair nao descarta edicao nem sessao enquanto lista nao pode ser gravada',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),target=before.cesta[0];await failStateWrites(p);
+ await p.driver.executeScript('document.querySelector("[data-mais="+JSON.stringify(arguments[0])+"]").click();document.getElementById("sair").click()',target.g);
+ await p.waitText('#salvamentoAviso','Não foi possível salvar');await afterDebounce(p);
+ assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);assert.equal(await localSession(p),'visitante');assert.deepEqual(await savedGuestBasket(p),before);assert.equal((await visibleBasket(p)).find(i=>i.g===target.g).qtd,target.qtd+1);
+ await restoreStateWrites(p);await p.click('#salvarNovamente');await savedNoticeHidden(p);await p.click('#sair');await p.element('#formEntrar');
+ assert.equal(await localSession(p),null);assert.deepEqual((await savedGuestBasket(p)).cesta,incrementedBasket(before,target.g));assert.equal(await p.driver.executeScript('return localStorage.getItem("pila.estado")'),null);
+});
+scenario('retry grava somente lista da conta sem modificar visitante ou cadastro',async p=>{
+ await guest(p);await basket(p);const visitor=await savedGuestBasket(p);await p.click('#sair');await p.element('#formEntrar');await register(p);const account=(await localAccounts(p))[0],accounts=await localAccounts(p);
+ await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await storedState(p,account.id))?.cesta?.length,5000);
+ const before=await storedState(p,account.id),target=before.cesta[0];await failStateWrites(p,account.id);await p.click('#catalogo [data-mais="'+target.g+'"]');await p.waitText('#salvamentoAviso','Não foi possível salvar');
+ assert.deepEqual(await storedState(p,account.id),before);assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);
+ await restoreStateWrites(p);await p.click('#salvarNovamente');await savedNoticeHidden(p);assert.deepEqual((await storedState(p,account.id)).cesta,incrementedBasket(before,target.g));assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);assert.equal(await localSession(p),account.id);
+});
+scenario('reutilizacao com falha informa estado temporario e retry grava a lista reutilizada',async p=>{
+ const {before,displayed}=await shoppingForReuse(p);await failStateWrites(p);await p.click('#reutilizarLista');await p.alert(/Reutilizar esta lista/);await p.element('#catalogo');await p.waitText('#salvamentoAviso','só na memória desta aba');
+ assert.deepEqual(await savedGuestBasket(p),before);assert.deepEqual(await visibleBasket(p),displayed);
+ await restoreStateWrites(p);await p.click('#salvarNovamente');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),reusedState(before));
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),reusedState(before));
+});
+scenario('falha ao remover sessao mantem usuario e informa nova tentativa de sair',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p);
+ await p.driver.executeScript('const original=Storage.prototype.removeItem;window.__qaRemoveItem=original;Storage.prototype.removeItem=function(key){if(key==="pila.sessao")throw new DOMException("QA denied","SecurityError");return original.call(this,key)}');
+ await p.click('#sair');await p.waitText('#salvamentoAviso','Não foi possível encerrar a sessão local');assert.equal(await localSession(p),'visitante');assert.deepEqual(await savedGuestBasket(p),before);assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);assert.equal(await p.driver.executeScript('return document.getElementById("salvarNovamente").hidden'),true);
+ await p.driver.executeScript('Storage.prototype.removeItem=window.__qaRemoveItem');await p.click('#sair');await p.element('#formEntrar');assert.equal(await localSession(p),null);assert.deepEqual(await savedGuestBasket(p),before);
+});

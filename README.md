@@ -25,7 +25,7 @@ O Pila divide a compra em dois momentos, e a tela muda conforme o momento:
 
 > Catálogo, preços e layout da loja são fictícios.
 
-Alterações da lista são salvas localmente com debounce. Ao sair da conta ou trocar o documento por uma navegação/recarga normal, uma gravação pendente é feita antes de limpar o contexto. Isso preserva edições rápidas na chave do usuário atual. Não é garantia contra falha de armazenamento, crash ou encerramento forçado; autenticação e pagamento continuam sendo demonstrações locais. Regressão e limites em `qa/KNOWN_ISSUES.md`.
+Alterações da lista são salvas localmente com debounce. Ao sair da conta ou trocar o documento por uma navegação/recarga normal, uma gravação pendente é feita antes de limpar o contexto. Isso preserva edições rápidas na chave do usuário atual. Se a gravação da lista falhar, um aviso informa que as alterações estão só na memória desta aba e oferece **Tentar salvar lista**. Mantenha a aba aberta: sair fica bloqueado enquanto houver uma alteração não gravada; após recuperar o armazenamento, tente salvar e depois sair. Falha ao remover a sessão também mantém o usuário na tela e pede nova tentativa de Sair. Não é garantia contra crash ou encerramento forçado; autenticação e pagamento continuam sendo demonstrações locais. Regressão e limites em `qa/KNOWN_ISSUES.md`.
 
 ## Reutilizar uma lista
 Na tela Pagamento, **Reutilizar esta lista** mantém os produtos, quantidades, orçamento, perfil da casa e escolha de marcas. Após confirmação, limpa as marcações de pego/não encontrado, o código anterior e a navegação da compra; volta à cesta em casa para revisar e editar. Cancelar mantém a compra atual. **Começar nova compra** continua apagando a cesta após confirmação.
