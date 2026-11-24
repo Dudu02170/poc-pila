@@ -1269,13 +1269,17 @@ let S = ESTADO_ZERO();
 let USUARIO = null;
 
 let salvaTimer = null;
+function salvarAgora(){
+  clearTimeout(salvaTimer);
+  salvaTimer = null;
+  const { busca, ...resto } = S;
+  Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
+}
 function salvar(){
   clearTimeout(salvaTimer);
-  salvaTimer = setTimeout(() => {
-    const { busca, ...resto } = S;
-    Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
-  }, 120);
+  salvaTimer = setTimeout(salvarAgora, 120);
 }
+addEventListener("pagehide", () => { if (salvaTimer !== null) salvarAgora(); });
 function carregarEstado(){
   const salvo = Armazem.ler("estado" + (USUARIO ? "." + USUARIO.id : ""), null);
   S = Object.assign(ESTADO_ZERO(), salvo || {});
@@ -1591,6 +1595,7 @@ $("#esqueci").addEventListener("click", () => {
   rec.className = "recado";
 });
 $("#sair").addEventListener("click", () => {
+  if (salvaTimer !== null) salvarAgora();
   Armazem.apaga("sessao");
   USUARIO = null; S = ESTADO_ZERO();
   $("#formEntrar").reset(); $("#formCriar").reset();

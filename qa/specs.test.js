@@ -1,4 +1,4 @@
-import { scenario, assert } from './support.js';
+import { scenario, assert, until } from './support.js';
 async function guest(p) { await p.open(); await p.click('#btVisitante'); await p.element('#orc'); }
 async function plan(p) { await guest(p); await p.element('#orc'); }
 scenario('rota protegida exige sessao', async p => {
@@ -133,4 +133,48 @@ scenario('alterar quantidade preserva todos os itens e valores apos recarregar',
  assert.deepEqual(await visibleBasket(p),expected,'recarga deve restaurar itens, nomes, preços e quantidades');
  assert.equal(await p.text('#bTotal'), 'R$ '+editedTotal.toFixed(2).replace('.',','));
  assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);
+});
+
+
+async function basket(p){
+ await p.element('#orc');await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');
+ await p.driver.wait(async()=>!!(await savedGuestBasket(p))?.cesta?.length,5000);
+}
+const storedState=(p,id)=>p.driver.executeScript('return JSON.parse(localStorage.getItem(arguments[0])||"null")','pila.estado.'+id);
+async function afterDebounce(p){await p.driver.executeAsyncScript('const done=arguments[arguments.length-1];setTimeout(done,250)');}
+async function quickEditAndLogout(p,g){
+ // Two real DOM click handlers in the same task: deterministically before the 120 ms debounce.
+ await p.driver.executeScript('document.querySelector("[data-mais="+JSON.stringify(arguments[0])+"]").click();document.getElementById("sair").click()',g);
+ await p.element('#formEntrar');await afterDebounce(p);
+}
+scenario('edicao seguida de saida preserva cesta do visitante sem criar estado anonimo',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),displayed=await visibleBasket(p),target=before.cesta[0];
+ await quickEditAndLogout(p,target.g);
+ const expected=before.cesta.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i),saved=await savedGuestBasket(p);
+ assert.deepEqual(saved.cesta,expected);assert.equal(saved.orcamento,before.orcamento);assert.equal(await localSession(p),null);
+ assert.equal(await p.driver.executeScript('return localStorage.getItem("pila.estado")'),null);
+ await p.click('#btVisitante');await p.element('[data-vai="casa"]');await p.click('[data-vai="casa"]');await p.element('#catalogo');
+ assert.deepEqual(await visibleBasket(p),displayed.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i));
+ assert.deepEqual((await savedGuestBasket(p)).cesta,expected);
+});
+scenario('sair com edicao pendente grava somente estado da conta e preserva visitante',async p=>{
+ await guest(p);await basket(p);const visitor=await savedGuestBasket(p);
+ await p.click('#sair');await p.element('#formEntrar');await register(p);
+ const account=(await localAccounts(p))[0];await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');
+ await p.driver.wait(async()=>!!(await storedState(p,account.id))?.cesta?.length,5000);
+ const before=await storedState(p,account.id),target=before.cesta[0];
+ await quickEditAndLogout(p,target.g);
+ const expected=before.cesta.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i);
+ assert.deepEqual((await storedState(p,account.id)).cesta,expected);assert.deepEqual(await savedGuestBasket(p),visitor);
+ assert.equal(await localSession(p),null);assert.equal(await p.driver.executeScript('return localStorage.getItem("pila.estado")'),null);
+ await p.fill('#eEmail','qa@example.test');await p.fill('#eSenha','SenhaQA123!');await p.click('#btEntrar');await p.element('[data-vai="casa"]');await p.click('[data-vai="casa"]');await p.element('#catalogo');
+ assert.deepEqual((await storedState(p,account.id)).cesta,expected);assert.equal((await visibleBasket(p)).find(i=>i.g===target.g).qtd,target.qtd+1);
+});
+scenario('recarga imediata depois de editar confirma pendencia antes de trocar documento',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),displayed=await visibleBasket(p),target=before.cesta[0],old=await p.element('#catalogo');
+ await p.driver.executeScript('document.querySelector("[data-mais="+JSON.stringify(arguments[0])+"]").click();location.reload()',target.g);
+ await p.driver.wait(until.stalenessOf(old),10000);await p.element('#catalogo');
+ const expected=before.cesta.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i);
+ assert.deepEqual((await savedGuestBasket(p)).cesta,expected);assert.deepEqual(await visibleBasket(p),displayed.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i));
+ assert.equal(await p.driver.executeScript('return localStorage.getItem("pila.estado")'),null);
 });

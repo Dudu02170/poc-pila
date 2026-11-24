@@ -25,6 +25,8 @@ O Pila divide a compra em dois momentos, e a tela muda conforme o momento:
 
 > Catálogo, preços e layout da loja são fictícios.
 
+Alterações da lista são salvas localmente com debounce. Ao sair da conta ou trocar o documento por uma navegação/recarga normal, uma gravação pendente é feita antes de limpar o contexto. Isso preserva edições rápidas na chave do usuário atual. Não é garantia contra falha de armazenamento, crash ou encerramento forçado; autenticação e pagamento continuam sendo demonstrações locais. Regressão e limites em `qa/KNOWN_ISSUES.md`.
+
 ## Como rodar
 
 Não precisa instalar nada:
