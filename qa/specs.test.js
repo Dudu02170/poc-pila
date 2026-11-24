@@ -1,3 +1,5 @@
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { scenario, assert, until } from './support.js';
 async function guest(p) { await p.open(); await p.click('#btVisitante'); await p.element('#orc'); }
 async function plan(p) { await guest(p); await p.element('#orc'); }
@@ -309,4 +311,50 @@ scenario('falha de leitura da chave preserva dados e recupera lista apos restaur
 scenario('estado parcial valido recebe defaults sem descartar metadados existentes',async p=>{
  await guest(p);const state={orcamento:1300,pessoas:3,cesta:[],metadataQA:'Preservar QA'},raw=JSON.stringify(state);await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',raw);await p.driver.navigate().refresh();await p.element('#orc');await savedNoticeHidden(p);assert.equal(await guestRaw(p),raw);
  await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await savedGuestBasket(p))?.cesta?.length,5000);const saved=await savedGuestBasket(p);assert.equal(saved.metadataQA,state.metadataQA);assert.equal(saved.pessoas,3);assert.equal(saved.dias,15);
+});
+
+
+async function downloadedInvalidCopy(p,raw){
+ const before=new Set(await readdir(p.downloadDir));let file;
+ await p.click('#copiarListaInvalida');await p.waitText('#recuperacaoTexto','Download solicitado');
+ await p.driver.wait(async()=>{
+  for(const name of await readdir(p.downloadDir)){
+   if(before.has(name)||!name.endsWith('.json'))continue;
+   const path=join(p.downloadDir,name);
+   try{if(await readFile(path,'utf8')===raw){file=path;return true;}}catch{}
+  }
+  return false;
+ },10000,'arquivo concluído pelo Chrome com conteúdo original');return file;
+}
+async function replaceTemporary(p){await p.click('#usarListaTemporaria');await p.alert(/dados anteriores serão descartados/);}
+scenario('copia conteudo invalido real e substitui somente com confirmacao preservando trabalho',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),target=original.cesta[0],raw='{lista inválida QA\n';await p.driver.executeScript('localStorage.setItem("qa.outro","Preservar QA")');
+ await corruptGuest(p,raw);await temporaryBasket(p);await p.click('#catalogo [data-mais="'+target.g+'"]');await afterDebounce(p);const displayed=await visibleBasket(p),file=await downloadedInvalidCopy(p,raw);
+ await p.click('#usarListaTemporaria');const a=await p.driver.wait(until.alertIsPresent(),10000);assert.match(await a.getText(),/campos e itens atuais serão mantidos/);await a.dismiss();assert.equal(await guestRaw(p),raw);assert.deepEqual(await visibleBasket(p),displayed);
+ await replaceTemporary(p);await savedNoticeHidden(p);const expected={...original,cesta:incrementedBasket(original,target.g)};assert.deepEqual(await savedGuestBasket(p),expected);assert.deepEqual(await visibleBasket(p),displayed);assert.equal(await p.driver.executeScript('return localStorage.getItem("qa.outro")'),'Preservar QA');assert.equal(await localSession(p),'visitante');assert.equal(await readFile(file,'utf8'),raw);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),expected);assert.deepEqual(await visibleBasket(p),displayed);
+});
+scenario('recuperacao nao oferece descarte quando leitura esta inacessivel',async p=>{
+ await guest(p);await basket(p);const raw=await guestRaw(p);await p.click('#sair');await p.element('#formEntrar');
+ await p.driver.executeScript('const original=Storage.prototype.getItem;window.__qaRecoveryGet=original;Storage.prototype.getItem=function(key){if(key==="pila.estado.visitante")throw new DOMException("QA denied","SecurityError");return original.call(this,key)}');
+ await p.click('#btVisitante');await p.element('#orc');await p.waitText('#salvamentoAviso','Não foi possível ler');
+ assert.equal(await p.driver.executeScript('return document.getElementById("copiarListaInvalida").hidden&&document.getElementById("usarListaTemporaria").hidden'),true);
+ await p.driver.executeScript('document.getElementById("usarListaTemporaria").click()');assert.equal(await p.driver.executeScript('return window.__qaRecoveryGet.call(localStorage,"pila.estado.visitante")'),raw);
+});
+scenario('falha ao substituir lista invalida mantem trabalho e dados para tentar novamente',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),raw='{inválido QA';await corruptGuest(p,raw);await temporaryBasket(p);const displayed=await visibleBasket(p);await failStateWrites(p);
+ await replaceTemporary(p);await p.waitText('#recuperacaoTexto','Não foi possível substituir');assert.equal(await guestRaw(p),raw);assert.deepEqual(await visibleBasket(p),displayed);assert.equal(await localSession(p),'visitante');
+ await restoreStateWrites(p);await replaceTemporary(p);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),original);assert.deepEqual(await visibleBasket(p),displayed);
+});
+scenario('recuperacao antiga recusa substituir dados corrigidos por outra aba',async p=>{
+ await guest(p);await basket(p);await corruptGuest(p,'{antigo QA');await temporaryBasket(p);await p.click('#catalogo [data-mais="banana"]');await afterDebounce(p);const a=await p.driver.getWindowHandle(),displayed=await visibleBasket(p);
+ await p.driver.switchTo().newWindow('tab');await p.open();await p.element('#orc');await temporaryBasket(p);await p.click('#catalogo [data-mais="tomate"]');await afterDebounce(p);await replaceTemporary(p);await savedNoticeHidden(p);const current=await savedGuestBasket(p);
+ await p.driver.switchTo().window(a);await replaceTemporary(p);await p.waitText('#recuperacaoTexto','Os dados salvos mudaram');assert.deepEqual(await savedGuestBasket(p),current);assert.deepEqual(await visibleBasket(p),displayed);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),current);assert.equal((await visibleBasket(p)).find(i=>i.g==='tomate').qtd,current.cesta.find(i=>i.g==='tomate').qtd);
+});
+scenario('copia e recuperacao da conta nao incluem nem alteram dados do visitante ou cadastro',async p=>{
+ await guest(p);await basket(p);const visitor=await savedGuestBasket(p);await p.click('#sair');await p.element('#formEntrar');await register(p);const accounts=await localAccounts(p),id=accounts[0].id,raw='{conta inválida QA';
+ await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await storedState(p,id))?.cesta?.length,5000);const original=await storedState(p,id);
+ await p.driver.executeScript('localStorage.setItem(arguments[0],arguments[1])','pila.estado.'+id,raw);await p.driver.navigate().refresh();await p.element('#orc');await temporaryBasket(p);const file=await downloadedInvalidCopy(p,raw);
+ await replaceTemporary(p);await savedNoticeHidden(p);assert.deepEqual(await storedState(p,id),original);assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);assert.equal(await localSession(p),id);assert.equal(await readFile(file,'utf8'),raw);
 });

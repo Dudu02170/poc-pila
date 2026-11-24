@@ -98,9 +98,11 @@ b,strong{font-weight:600}
   box-shadow:0 1px 0 rgba(0,0,0,.15);padding-top:env(safe-area-inset-top)}
 .topo[hidden]{display:none}
 #salvamentoAviso{background:#FFF1D6;color:#332C29;flex-wrap:wrap}
-#salvamentoAviso[hidden],#salvarNovamente[hidden],#lerNovamente[hidden]{display:none}
+#salvamentoAviso[hidden],#salvarNovamente[hidden],#lerNovamente[hidden],#copiarListaInvalida[hidden],#usarListaTemporaria[hidden]{display:none}
 #salvamentoAviso p{flex:1;min-width:200px;margin:0;font-size:14px}
-#salvarNovamente,#lerNovamente{font:inherit;padding:8px 12px;border:1px solid #665744;border-radius:8px;background:#fff;cursor:pointer}
+#salvarNovamente,#lerNovamente,#copiarListaInvalida,#usarListaTemporaria{font:inherit;padding:8px 12px;border:1px solid #665744;border-radius:8px;background:#fff;cursor:pointer}
+#salvamentoAviso #recuperacaoTexto{flex-basis:100%;min-width:0;font-size:13px}
+#salvamentoAviso #recuperacaoTexto:empty{display:none}
 .topo .wrap{display:flex;align-items:center;gap:14px;padding:9px 18px;flex-wrap:wrap}
 .logo{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:30px;
   text-transform:uppercase;letter-spacing:.06em;line-height:1;
@@ -633,6 +635,9 @@ body.com-barra main{padding-bottom:150px}
   <div class="wrap" id="salvamentoAviso" role="alert" hidden>
     <p id="salvamentoTexto"></p><button type="button" id="salvarNovamente">Tentar salvar lista</button>
     <button type="button" id="lerNovamente" hidden>Tentar ler lista</button>
+    <button type="button" id="copiarListaInvalida" hidden>Baixar cópia local</button>
+    <button type="button" id="usarListaTemporaria" hidden>Usar lista temporária</button>
+    <p id="recuperacaoTexto" role="status" aria-live="polite"></p>
   </div>
 </header>
 
@@ -1282,16 +1287,23 @@ let USUARIO = null;
 let salvaTimer = null;
 let estadoPendente = false;
 let leituraBloqueada = false;
+let rawInvalido;
 function avisoSalvamento(texto, repetir = true){
   $("#salvamentoTexto").textContent = texto;
   $("#salvamentoAviso").hidden = !texto;
   $("#salvarNovamente").hidden = !repetir;
   $("#lerNovamente").hidden = true;
+  $("#copiarListaInvalida").hidden = true;
+  $("#usarListaTemporaria").hidden = true;
+  if (!texto) $("#recuperacaoTexto").textContent = "";
   medirTopo();
 }
 function avisoLeitura(){
   avisoSalvamento("Não foi possível ler a lista salva. Os dados anteriores não foram alterados. A lista desta aba é temporária; tente ler novamente antes de salvar.", false);
-  $("#lerNovamente").hidden = false; medirTopo();
+  $("#lerNovamente").hidden = false;
+  $("#copiarListaInvalida").hidden = typeof rawInvalido !== "string";
+  $("#usarListaTemporaria").hidden = typeof rawInvalido !== "string";
+  medirTopo();
 }
 function salvarAgora(){
   clearTimeout(salvaTimer);
@@ -1340,17 +1352,19 @@ function estadoLegivel(d){
   return true;
 }
 function lerEstado(){
+  let raw;
   try {
-    const raw = localStorage.getItem("pila.estado" + (USUARIO ? "." + USUARIO.id : ""));
+    raw = localStorage.getItem("pila.estado" + (USUARIO ? "." + USUARIO.id : ""));
     if (raw === null) return { ok:true, valor:null };
     const valor = JSON.parse(raw);
     if (!estadoLegivel(valor)) throw new Error("Estado inválido");
     return { ok:true, valor };
-  } catch (e) { return { ok:false }; }
+  } catch (e) { return { ok:false, raw }; }
 }
 function carregarEstado(resultado = lerEstado()){
   clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false;
   leituraBloqueada = !resultado.ok;
+  rawInvalido = leituraBloqueada ? resultado.raw : undefined;
   if (leituraBloqueada) avisoLeitura(); else avisoSalvamento("");
   const salvo = resultado.ok ? resultado.valor : null;
   S = Object.assign(ESTADO_ZERO(), salvo || {});
@@ -1361,8 +1375,41 @@ $("#lerNovamente").addEventListener("click", () => {
   if (!USUARIO || !leituraBloqueada) return;
   if (estadoPendente && !confirm("Tentar reler a lista salva? Se a leitura funcionar, as alterações temporárias desta aba serão substituídas pelos dados salvos.")) return;
   const resultado = lerEstado();
-  if (!resultado.ok){ avisoLeitura(); return; }
+  if (!resultado.ok){ rawInvalido = resultado.raw; avisoLeitura(); return; }
   carregarEstado(resultado); ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
+});
+$("#copiarListaInvalida").addEventListener("click", () => {
+  if (!USUARIO || !leituraBloqueada || typeof rawInvalido !== "string") return;
+  let url;
+  try {
+    const raw = localStorage.getItem("pila.estado." + USUARIO.id);
+    if (raw === null) throw new Error("Sem dados");
+    url = URL.createObjectURL(new Blob([raw], { type:"application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "pila-lista-local.json"; link.hidden = true;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $("#recuperacaoTexto").textContent = "Download solicitado. Confira a cópia antes de substituir os dados inválidos. O arquivo não é reparado nem importado.";
+  } catch (e) {
+    if (url) URL.revokeObjectURL(url);
+    $("#recuperacaoTexto").textContent = "Não foi possível solicitar a cópia. Os dados não foram alterados.";
+  }
+});
+$("#usarListaTemporaria").addEventListener("click", () => {
+  if (!USUARIO || !leituraBloqueada || typeof rawInvalido !== "string") return;
+  const esperado = rawInvalido;
+  if (!confirm("Substituir os dados inválidos pela lista temporária desta aba? Os dados anteriores serão descartados. Baixe e confira uma cópia antes. Os campos e itens atuais serão mantidos.")) return;
+  try {
+    if (localStorage.getItem("pila.estado." + USUARIO.id) !== esperado){
+      $("#recuperacaoTexto").textContent = "Os dados salvos mudaram. Use Tentar ler lista e confira os dados atuais antes de substituir."; return;
+    }
+    const { busca, ...resto } = S;
+    if (!Armazem.grava("estado." + USUARIO.id, resto)) throw new Error("Gravação indisponível");
+    clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false; leituraBloqueada = false; rawInvalido = undefined;
+    avisoSalvamento("");
+  } catch (e) {
+    $("#recuperacaoTexto").textContent = "Não foi possível substituir os dados. A lista continua temporária; mantenha esta aba aberta e tente novamente.";
+  }
 });
 
 /* ── preço e catálogo ─────────────────────────────────────── */
