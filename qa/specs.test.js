@@ -272,3 +272,41 @@ scenario('falha ao remover sessao mantem usuario e informa nova tentativa de sai
  await p.click('#sair');await p.waitText('#salvamentoAviso','Não foi possível encerrar a sessão local');assert.equal(await localSession(p),'visitante');assert.deepEqual(await savedGuestBasket(p),before);assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);assert.equal(await p.driver.executeScript('return document.getElementById("salvarNovamente").hidden'),true);
  await p.driver.executeScript('Storage.prototype.removeItem=window.__qaRemoveItem');await p.click('#sair');await p.element('#formEntrar');assert.equal(await localSession(p),null);assert.deepEqual(await savedGuestBasket(p),before);
 });
+
+
+const guestRaw=p=>p.driver.executeScript('return localStorage.getItem("pila.estado.visitante")');
+async function corruptGuest(p,raw){await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',raw);await p.driver.navigate().refresh();await p.element('#orc');await p.waitText('#salvamentoAviso','Não foi possível ler a lista salva');}
+async function temporaryBasket(p){await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');await p.waitText('#salvamentoAviso','lista desta aba é temporária');await afterDebounce(p);}
+scenario('JSON quebrado bloqueia gravacao e saida sem alterar conteudo antigo',async p=>{
+ await guest(p);await basket(p);const raw='{lista antiga QA\n';await corruptGuest(p,raw);await temporaryBasket(p);
+ assert.equal(await guestRaw(p),raw);assert.equal(await p.driver.executeScript('return document.getElementById("salvarNovamente").hidden'),true);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias desta aba serão substituídas/);await p.waitText('#salvamentoAviso','Não foi possível ler');assert.equal(await guestRaw(p),raw);
+ await p.click('#sair');await p.waitText('#salvamentoAviso','Não foi possível ler');assert.equal(await localSession(p),'visitante');assert.equal(await guestRaw(p),raw);assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);
+});
+const invalidStates=[
+ ['conteiner em lista',[]],
+ ['quantidade textual',{cesta:[{g:'banana',qtd:'2'}]}],
+ ['perfil com restricoes invalidas',{cesta:[],restricoes:'gluten'}],
+ ['ajuste ativo incompleto',{cesta:[],ajuste:{ativo:true,marcas:1}}]
+];
+for(const [name,state] of invalidStates)scenario('estado salvo invalido protegido: '+name,async p=>{
+ await guest(p);await basket(p);const raw=JSON.stringify(state);await corruptGuest(p,raw);await temporaryBasket(p);assert.equal(await guestRaw(p),raw);
+});
+scenario('reler dados corrigidos exige confirmar substituicao temporaria e restaura sem gravar',async p=>{
+ await guest(p);await basket(p);const initialQuantity=(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd;await p.click('#catalogo [data-mais="banana"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd===initialQuantity+1,5000);
+ const original=await savedGuestBasket(p),displayed=await visibleBasket(p),raw=await guestRaw(p);await corruptGuest(p,'{corrompido QA');await temporaryBasket(p);await p.click('#catalogo [data-mais="banana"]');await p.click('#catalogo [data-mais="banana"]');await afterDebounce(p);const temporary=await visibleBasket(p);
+ await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',raw);
+ await p.click('#lerNovamente');const a=await p.driver.wait(until.alertIsPresent(),10000);assert.match(await a.getText(),/alterações temporárias/);await a.dismiss();assert.deepEqual(await visibleBasket(p),temporary);assert.equal(await guestRaw(p),raw);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),original);assert.deepEqual(await visibleBasket(p),displayed);assert.equal(await guestRaw(p),raw);
+});
+scenario('falha de leitura da chave preserva dados e recupera lista apos restaurar acesso',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),displayed=await visibleBasket(p),raw=await guestRaw(p);await p.click('#sair');await p.element('#formEntrar');
+ await p.driver.executeScript('const original=Storage.prototype.getItem;window.__qaStateGet=original;Storage.prototype.getItem=function(key){if(key==="pila.estado.visitante")throw new DOMException("QA denied","SecurityError");return original.call(this,key)}');
+ await p.click('#btVisitante');await p.element('#orc');await p.waitText('#salvamentoAviso','Não foi possível ler');await temporaryBasket(p);
+ assert.equal(await p.driver.executeScript('return window.__qaStateGet.call(localStorage,"pila.estado.visitante")'),raw);
+ await p.driver.executeScript('Storage.prototype.getItem=window.__qaStateGet');await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),original);assert.deepEqual(await visibleBasket(p),displayed);
+});
+scenario('estado parcial valido recebe defaults sem descartar metadados existentes',async p=>{
+ await guest(p);const state={orcamento:1300,pessoas:3,cesta:[],metadataQA:'Preservar QA'},raw=JSON.stringify(state);await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',raw);await p.driver.navigate().refresh();await p.element('#orc');await savedNoticeHidden(p);assert.equal(await guestRaw(p),raw);
+ await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await savedGuestBasket(p))?.cesta?.length,5000);const saved=await savedGuestBasket(p);assert.equal(saved.metadataQA,state.metadataQA);assert.equal(saved.pessoas,3);assert.equal(saved.dias,15);
+});
