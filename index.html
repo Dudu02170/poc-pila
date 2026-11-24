@@ -942,8 +942,10 @@ body.com-barra main{padding-bottom:150px}
             e recebe a lista e o valor do servidor da loja — o preço nunca viaja dentro do código,
             então ninguém consegue forjar um QR mais barato.</p>
         </div>
+        <p class="sub" id="reutilizarAjuda">Reutilizar mantém os produtos, quantidades e orçamento para outra compra. Limpa as marcações de pego/não encontrado e o código anterior, após confirmação.</p>
         <div class="linha-btn">
           <button class="btn btn-n" data-rota="#/mercado/rota">Voltar à lista</button>
+          <button class="btn btn-v" id="reutilizarLista" aria-describedby="reutilizarAjuda">Reutilizar esta lista</button>
           <button class="btn btn-n" id="novaCompra">Começar nova compra</button>
         </div>
       </div>
@@ -2220,6 +2222,14 @@ function desenharPagamento(){
     ? "No totem, o cliente encosta o QR no leitor, confere a lista na tela e paga por cartão ou Pix. Sem fila de operador."
     : "No caixa, o operador lê o QR e todos os itens entram de uma vez. Sem bipar produto por produto, sem erro de digitação.";
 }
+$("#reutilizarLista").addEventListener("click", () => {
+  if (!S.cesta.length) return;
+  if (!confirm("Reutilizar esta lista? Os produtos, quantidades e orçamento serão mantidos. As marcações de pego/não encontrado e o código anterior serão limpos.")) return;
+  S.cesta = S.cesta.map(i => ({ ...i, pego:false, faltou:false }));
+  Object.assign(S, { codigo:null, corredorAtual:null, abreBusca:false, abreLista:false,
+                     buscaMerc:"", busca:"", aba:"carrinho", modo:"casa" });
+  salvarAgora(); ir("#/casa/cesta");
+});
 $("#novaCompra").addEventListener("click", () => {
   if (!confirm("Começar uma compra nova? A lista atual será apagada.")) return;
   const perfil = { pessoas:S.pessoas, dias:S.dias, restricoes:S.restricoes, extras:S.extras,

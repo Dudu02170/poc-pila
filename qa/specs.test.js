@@ -178,3 +178,49 @@ scenario('recarga imediata depois de editar confirma pendencia antes de trocar d
  assert.deepEqual((await savedGuestBasket(p)).cesta,expected);assert.deepEqual(await visibleBasket(p),displayed.map(i=>i.g===target.g?{...i,qtd:i.qtd+1}:i));
  assert.equal(await p.driver.executeScript('return localStorage.getItem("pila.estado")'),null);
 });
+
+async function shoppingForReuse(p){
+ await guest(p);await p.click('#dobraPerfil summary');
+ await p.click('#v-plano [data-guarda="pessoas"] [data-v="3"]');await p.click('#v-plano [data-guarda="dias"] [data-v="7"]');await p.click('#v-plano [data-guarda="restricoes"] [data-v="gluten"]');
+ await basket(p);const bananaBefore=(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd;await p.click('#catalogo [data-mais="banana"]');await p.click('#v-cesta [data-guarda="filtro"] [data-v="barato"]');
+ await p.driver.wait(async()=>{const s=await savedGuestBasket(p);return s?.filtro==='barato'&&s.cesta.find(i=>i.g==='banana')?.qtd===bananaBefore+1;},5000);
+ const displayed=await visibleBasket(p),plannedTotal=await p.text('#bTotal');
+ await p.click('#troca [data-modo="mercado"]');await p.element('#rotaCorpo');
+ await p.click('.corredor-atual [data-pega="banana"]');await p.click('.corredor-atual [data-faltou="tomate"]');
+ await p.click('#dobraBusca summary');await p.fill('#buscaMerc','cafe');await p.click('#dobraLista summary');
+ await p.click('#bSeguir');await p.element('#bilhete .cod');await p.click('#v-pagar [data-guarda="canal"] [data-v="totem"]');
+ await p.driver.wait(async()=>{const s=await savedGuestBasket(p);return !!s?.codigo&&s.canal==='totem'&&s.abreBusca&&s.abreLista&&s.buscaMerc==='cafe';},5000);
+ return {before:await savedGuestBasket(p),displayed,plannedTotal};
+}
+const reusedState=before=>({...before,cesta:before.cesta.map(i=>({...i,pego:false,faltou:false})),codigo:null,corredorAtual:null,abreBusca:false,abreLista:false,buscaMerc:'',aba:'carrinho',modo:'casa'});
+scenario('reutiliza lista editada preservando itens perfil valores e liberando nova compra',async p=>{
+ const {before,displayed,plannedTotal}=await shoppingForReuse(p),expected=reusedState(before);
+ assert.ok(before.cesta.some(i=>i.pego));assert.ok(before.cesta.some(i=>i.faltou));
+ await p.click('#reutilizarLista');await p.alert(/produtos, quantidades e orçamento serão mantidos/);await p.element('#catalogo');
+ assert.match(await p.driver.getCurrentUrl(),/#\/casa\/cesta$/);assert.deepEqual(await savedGuestBasket(p),expected);assert.deepEqual(await visibleBasket(p),displayed);assert.equal(await p.text('#bTotal'),plannedTotal);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),expected);assert.deepEqual(await visibleBasket(p),displayed);
+ await p.click('#troca [data-modo="mercado"]');await p.waitText('#mercPegos','0 de '+before.cesta.length+' itens');await p.waitText('#mercValor','R$ 0,00');
+ assert.equal((await savedGuestBasket(p)).cesta.filter(i=>i.pego||i.faltou).length,0);
+ await p.click('#bSeguir');await p.waitText('#bilhete','Você ainda não marcou nenhum item');assert.equal((await savedGuestBasket(p)).codigo,null);
+ await p.click('#v-pagar [data-rota="#/mercado/rota"]');await p.click('.corredor-atual [data-pega="banana"]');await p.click('#bSeguir');await p.element('#bilhete .cod');
+ await p.driver.wait(async()=>!!(await savedGuestBasket(p))?.codigo,5000);assert.match((await savedGuestBasket(p)).codigo,/^PLA-[A-Z2-9]{4}-\d{4}$/);assert.equal((await savedGuestBasket(p)).cesta.filter(i=>i.pego).length,1);
+});
+scenario('cancelar reutilizacao preserva codigo marcacoes e todos os dados da compra',async p=>{
+ const {before}=await shoppingForReuse(p),code=await p.text('#bilhete .cod');
+ await p.click('#reutilizarLista');const dialog=await p.driver.wait(until.alertIsPresent(),10000);assert.match(await dialog.getText(),/código anterior serão limpos/);await dialog.dismiss();await afterDebounce(p);
+ assert.match(await p.driver.getCurrentUrl(),/#\/mercado\/pagar$/);assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await p.text('#bilhete .cod'),code);
+});
+scenario('comecar nova compra continua limpando cesta depois da confirmacao',async p=>{
+ const {before}=await shoppingForReuse(p);await p.click('#novaCompra');await p.alert(/lista atual será apagada/);await p.element('#orc');
+ await p.driver.wait(async()=>{const s=await savedGuestBasket(p);return s?.cesta?.length===0&&s.codigo===null;},5000);
+ const after=await savedGuestBasket(p);for(const key of ['pessoas','dias','restricoes','extras','filtro','orcamento'])assert.deepEqual(after[key],before[key]);
+ assert.deepEqual(after.cesta,[]);assert.equal(after.montada,false);assert.match(await p.driver.getCurrentUrl(),/#\/casa\/plano$/);
+});
+scenario('conta reutiliza lista sem marcacoes e sem alterar cesta do visitante',async p=>{
+ await guest(p);await basket(p);const visitor=await savedGuestBasket(p);await p.click('#sair');await p.element('#formEntrar');await register(p);const id=(await localAccounts(p))[0].id;
+ await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await storedState(p,id))?.cesta?.length,5000);
+ await p.click('#troca [data-modo="mercado"]');await p.click('#bSeguir');await p.waitText('#bilhete','Você ainda não marcou nenhum item');
+ await p.driver.wait(async()=>(await storedState(p,id))?.modo==='mercado',5000);const before=await storedState(p,id);
+ await p.click('#reutilizarLista');await p.alert(/Reutilizar esta lista/);await p.element('#catalogo');assert.deepEqual(await storedState(p,id),reusedState(before));assert.deepEqual(await savedGuestBasket(p),visitor);assert.equal(await localSession(p),id);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await storedState(p,id),reusedState(before));assert.deepEqual(await savedGuestBasket(p),visitor);
+});
