@@ -179,6 +179,11 @@ scenario('recarga imediata depois de editar confirma pendencia antes de trocar d
  assert.equal(await p.driver.executeScript('return localStorage.getItem("pila.estado")'),null);
 });
 
+async function centeredClick(p,selector){
+ const element=await p.element(selector);
+ await p.driver.executeScript('arguments[0].scrollIntoView({block:"center",behavior:"instant"})',element);
+ await element.click();
+}
 async function shoppingForReuse(p){
  await guest(p);await p.click('#dobraPerfil summary');
  await p.click('#v-plano [data-guarda="pessoas"] [data-v="3"]');await p.click('#v-plano [data-guarda="dias"] [data-v="7"]');await p.click('#v-plano [data-guarda="restricoes"] [data-v="gluten"]');
@@ -187,7 +192,7 @@ async function shoppingForReuse(p){
  const displayed=await visibleBasket(p),plannedTotal=await p.text('#bTotal');
  await p.click('#troca [data-modo="mercado"]');await p.element('#rotaCorpo');
  await p.click('.corredor-atual [data-pega="banana"]');await p.click('.corredor-atual [data-faltou="tomate"]');
- await p.click('#dobraBusca summary');await p.fill('#buscaMerc','cafe');await p.click('#dobraLista summary');
+ await centeredClick(p,'#dobraBusca summary');await p.fill('#buscaMerc','cafe');await centeredClick(p,'#dobraLista summary');
  await p.click('#bSeguir');await p.element('#bilhete .cod');await p.click('#v-pagar [data-guarda="canal"] [data-v="totem"]');
  await p.driver.wait(async()=>{const s=await savedGuestBasket(p);return !!s?.codigo&&s.canal==='totem'&&s.abreBusca&&s.abreLista&&s.buscaMerc==='cafe';},5000);
  return {before:await savedGuestBasket(p),displayed,plannedTotal};
