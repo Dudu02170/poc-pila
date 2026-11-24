@@ -37,9 +37,15 @@ export function scenario(name, body) {
         driver,downloadDir,
         async open(path = '/') { await driver.get(server.url + path); },
         async element(css) {
-          const e = await driver.wait(until.elementLocated(By.css(css)), 10000, css);
-          await driver.wait(until.elementIsVisible(e), 10000, css);
-          return e;
+          return driver.wait(async () => {
+            try {
+              const e = await driver.findElement(By.css(css));
+              return await e.isDisplayed() ? e : false;
+            } catch (error) {
+              if (['NoSuchElementError','StaleElementReferenceError'].includes(error.name)) return false;
+              throw error;
+            }
+          }, 10000, css);
         },
         async click(css) { await (await this.element(css)).click(); },
         async fill(css, value) {
@@ -54,7 +60,10 @@ export function scenario(name, body) {
           catch (e) { if (!String(e.message).includes('Cannot locate option')) throw e; await select.selectByVisibleText(value); }
         },
         async waitText(css, expected) {
-          await driver.wait(async () => (await this.text(css)).toLocaleLowerCase('pt-BR').includes(expected.toLocaleLowerCase('pt-BR')), 10000, css + ': ' + expected);
+          await driver.wait(async () => {
+            try { return (await this.text(css)).toLocaleLowerCase('pt-BR').includes(expected.toLocaleLowerCase('pt-BR')); }
+            catch (error) { if (error.name === 'StaleElementReferenceError') return false; throw error; }
+          }, 10000, css + ': ' + expected);
         },
         async alert(text, answer) {
           const a = await driver.wait(until.alertIsPresent(), 10000);

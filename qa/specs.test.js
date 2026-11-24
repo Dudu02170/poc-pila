@@ -348,7 +348,7 @@ scenario('falha ao substituir lista invalida mantem trabalho e dados para tentar
 });
 scenario('recuperacao antiga recusa substituir dados corrigidos por outra aba',async p=>{
  await guest(p);await basket(p);await corruptGuest(p,'{antigo QA');await temporaryBasket(p);await p.click('#catalogo [data-mais="banana"]');await afterDebounce(p);const a=await p.driver.getWindowHandle(),displayed=await visibleBasket(p);
- await p.driver.switchTo().newWindow('tab');await p.open();await p.element('#orc');await temporaryBasket(p);await p.click('#catalogo [data-mais="tomate"]');await afterDebounce(p);await replaceTemporary(p);await savedNoticeHidden(p);const current=await savedGuestBasket(p);
+ await p.driver.switchTo().newWindow('tab');await p.open();await p.element('#orc');await temporaryBasket(p);await centeredClick(p,'#catalogo [data-mais="tomate"]');await afterDebounce(p);await replaceTemporary(p);await savedNoticeHidden(p);const current=await savedGuestBasket(p);
  await p.driver.switchTo().window(a);await replaceTemporary(p);await p.waitText('#recuperacaoTexto','Os dados salvos mudaram');assert.deepEqual(await savedGuestBasket(p),current);assert.deepEqual(await visibleBasket(p),displayed);
  await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),current);assert.equal((await visibleBasket(p)).find(i=>i.g==='tomate').qtd,current.cesta.find(i=>i.g==='tomate').qtd);
 });
