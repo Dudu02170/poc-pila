@@ -1288,11 +1288,14 @@ let salvaTimer = null;
 let estadoPendente = false;
 let leituraBloqueada = false;
 let rawInvalido;
+let rawConhecido;
+let conflitoEstado = false;
 function avisoSalvamento(texto, repetir = true){
   $("#salvamentoTexto").textContent = texto;
   $("#salvamentoAviso").hidden = !texto;
   $("#salvarNovamente").hidden = !repetir;
   $("#lerNovamente").hidden = true;
+  $("#lerNovamente").textContent = "Tentar ler lista";
   $("#copiarListaInvalida").hidden = true;
   $("#usarListaTemporaria").hidden = true;
   if (!texto) $("#recuperacaoTexto").textContent = "";
@@ -1305,13 +1308,32 @@ function avisoLeitura(){
   $("#usarListaTemporaria").hidden = typeof rawInvalido !== "string";
   medirTopo();
 }
+function avisoConflito(){
+  avisoSalvamento("A lista salva foi alterada em outra aba. Suas alterações estão só na memória desta aba. Recarregue e confira a lista salva antes de editar novamente.", false);
+  $("#lerNovamente").hidden = false;
+  $("#lerNovamente").textContent = "Recarregar lista salva";
+  medirTopo();
+}
 function salvarAgora(){
   clearTimeout(salvaTimer);
   salvaTimer = null;
   if (leituraBloqueada){ estadoPendente = true; avisoLeitura(); return false; }
+  if (conflitoEstado){ estadoPendente = true; avisoConflito(); return false; }
+  if (USUARIO){
+    try {
+      if (localStorage.getItem("pila.estado." + USUARIO.id) !== rawConhecido){
+        estadoPendente = true; conflitoEstado = true; avisoConflito(); return false;
+      }
+    } catch (e) {
+      estadoPendente = true;
+      avisoSalvamento("Não foi possível conferir a lista salva. Suas alterações estão só na memória desta aba. Mantenha a aba aberta e tente novamente.");
+      return false;
+    }
+  }
   const { busca, ...resto } = S;
   const gravou = Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
   estadoPendente = !gravou;
+  if (gravou) rawConhecido = JSON.stringify(resto);
   avisoSalvamento(gravou ? "" : "Não foi possível salvar a lista neste navegador. As alterações estão só na memória desta aba. Mantenha a aba aberta e tente novamente.");
   return gravou;
 }
@@ -1355,15 +1377,16 @@ function lerEstado(){
   let raw;
   try {
     raw = localStorage.getItem("pila.estado" + (USUARIO ? "." + USUARIO.id : ""));
-    if (raw === null) return { ok:true, valor:null };
+    if (raw === null) return { ok:true, valor:null, raw };
     const valor = JSON.parse(raw);
     if (!estadoLegivel(valor)) throw new Error("Estado inválido");
-    return { ok:true, valor };
+    return { ok:true, valor, raw };
   } catch (e) { return { ok:false, raw }; }
 }
 function carregarEstado(resultado = lerEstado()){
   clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false;
   leituraBloqueada = !resultado.ok;
+  rawConhecido = resultado.raw; conflitoEstado = false;
   rawInvalido = leituraBloqueada ? resultado.raw : undefined;
   if (leituraBloqueada) avisoLeitura(); else avisoSalvamento("");
   const salvo = resultado.ok ? resultado.valor : null;
@@ -1372,10 +1395,10 @@ function carregarEstado(resultado = lerEstado()){
   if (USUARIO && USUARIO.pessoas && !salvo) S.pessoas = USUARIO.pessoas;
 }
 $("#lerNovamente").addEventListener("click", () => {
-  if (!USUARIO || !leituraBloqueada) return;
+  if (!USUARIO || (!leituraBloqueada && !conflitoEstado)) return;
   if (estadoPendente && !confirm("Tentar reler a lista salva? Se a leitura funcionar, as alterações temporárias desta aba serão substituídas pelos dados salvos.")) return;
   const resultado = lerEstado();
-  if (!resultado.ok){ rawInvalido = resultado.raw; avisoLeitura(); return; }
+  if (!resultado.ok){ leituraBloqueada = true; conflitoEstado = false; rawConhecido = undefined; rawInvalido = resultado.raw; avisoLeitura(); return; }
   carregarEstado(resultado); ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
 });
 $("#copiarListaInvalida").addEventListener("click", () => {
@@ -1405,6 +1428,7 @@ $("#usarListaTemporaria").addEventListener("click", () => {
     }
     const { busca, ...resto } = S;
     if (!Armazem.grava("estado." + USUARIO.id, resto)) throw new Error("Gravação indisponível");
+    rawConhecido = JSON.stringify(resto); conflitoEstado = false;
     clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false; leituraBloqueada = false; rawInvalido = undefined;
     avisoSalvamento("");
   } catch (e) {

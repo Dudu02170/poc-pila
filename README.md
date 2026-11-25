@@ -29,6 +29,8 @@ Alterações da lista são salvas localmente com debounce. Ao sair da conta ou t
 
 Se a lista salva não puder ser lida ou tiver formato incompatível, a aplicação mantém os dados antigos e bloqueia sua sobrescrita. Você pode explorar uma lista temporária nesta aba; **Tentar ler lista** permite recuperar os dados quando o acesso/conteúdo for corrigido. Se houver alterações temporárias, a releitura pede confirmação antes de substituí-las. **Baixar cópia local** solicita o conteúdo textual atual da lista em um arquivo UTF-8, inclusive quando inválido. Confira o arquivo antes de usar **Usar lista temporária**: essa ação exige confirmação para descartar o conteúdo inválido e gravar os campos/itens atuais desta aba. A substituição é recusada se os dados já tiverem mudado ou se a leitura estiver inacessível. Não há reparo ou importação automática.
 
+Antes de gravar uma lista do usuário, o Pila confere se o conteúdo salvo ainda é aquele lido por esta aba. Se outra aba já o alterou, mantém as edições locais em memória e oferece **Recarregar lista salva**, com confirmação antes de substituí-las. Depois de conferir a lista atual, reaplique a edição desejada. A conferência é sequencial: ainda não garante exclusão mútua entre escritas simultâneas de abas diferentes.
+
 ## Reutilizar uma lista
 Na tela Pagamento, **Reutilizar esta lista** mantém os produtos, quantidades, orçamento, perfil da casa e escolha de marcas. Após confirmação, limpa as marcações de pego/não encontrado, o código anterior e a navegação da compra; volta à cesta em casa para revisar e editar. Cancelar mantém a compra atual. **Começar nova compra** continua apagando a cesta após confirmação.
 

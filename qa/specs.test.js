@@ -358,3 +358,40 @@ scenario('copia e recuperacao da conta nao incluem nem alteram dados do visitant
  await p.driver.executeScript('localStorage.setItem(arguments[0],arguments[1])','pila.estado.'+id,raw);await p.driver.navigate().refresh();await p.element('#orc');await temporaryBasket(p);const file=await downloadedInvalidCopy(p,raw);
  await replaceTemporary(p);await savedNoticeHidden(p);assert.deepEqual(await storedState(p,id),original);assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);assert.equal(await localSession(p),id);assert.equal(await readFile(file,'utf8'),raw);
 });
+
+async function secondGuestTab(p){await p.driver.switchTo().newWindow('tab');await p.open();await p.element('[data-vai="casa"]');await p.click('[data-vai="casa"]');await p.element('#catalogo');return p.driver.getWindowHandle();}
+scenario('aba antiga preserva escrita externa ate confirmar recarga e reaplicar edicao',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),a=await p.driver.getWindowHandle();await secondGuestTab(p);
+ const tomato=original.cesta.find(i=>i.g==='tomate');await centeredClick(p,'#catalogo [data-mais="tomate"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='tomate').qtd===tomato.qtd+1,5000);const external=await savedGuestBasket(p);
+ await p.driver.switchTo().window(a);await centeredClick(p,'#catalogo [data-mais="banana"]');await p.waitText('#salvamentoAviso','alterada em outra aba');const local=await visibleBasket(p);assert.deepEqual(await savedGuestBasket(p),external);
+ await p.click('#sair');await p.waitText('#salvamentoAviso','alterada em outra aba');assert.equal(await localSession(p),'visitante');assert.deepEqual(await savedGuestBasket(p),external);
+ await p.click('#lerNovamente');const dialog=await p.driver.wait(until.alertIsPresent(),10000);assert.match(await dialog.getText(),/alterações temporárias/);await dialog.dismiss();assert.deepEqual(await visibleBasket(p),local);assert.deepEqual(await savedGuestBasket(p),external);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),external);assert.equal((await visibleBasket(p)).find(i=>i.g==='tomate').qtd,tomato.qtd+1);
+ await centeredClick(p,'#catalogo [data-mais="banana"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd===external.cesta.find(i=>i.g==='banana').qtd+1,5000);assert.deepEqual((await savedGuestBasket(p)).cesta,incrementedBasket(external,'banana'));
+});
+scenario('reutilizacao de aba antiga conserva dados salvos atuais e informa conflito',async p=>{
+ const {displayed}=await shoppingForReuse(p),a=await p.driver.getWindowHandle();await secondGuestTab(p);const before=await savedGuestBasket(p),quantity=before.cesta.find(i=>i.g==='banana').qtd;
+ await centeredClick(p,'#catalogo [data-mais="banana"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd===quantity+1,5000);const external=await savedGuestBasket(p);
+ await p.driver.switchTo().window(a);await p.click('#reutilizarLista');await p.alert(/produtos, quantidades e orçamento serão mantidos/);await p.element('#catalogo');await p.waitText('#salvamentoAviso','alterada em outra aba');assert.deepEqual(await savedGuestBasket(p),external);assert.deepEqual(await visibleBasket(p),displayed);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),external);
+});
+scenario('conteudo externo invalido nao e sobrescrito e recuperacao atualiza referencia de escrita',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),raw='{externo inválido QA';await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',raw);
+ await centeredClick(p,'#catalogo [data-mais="banana"]');await p.waitText('#salvamentoAviso','alterada em outra aba');assert.equal(await guestRaw(p),raw);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await p.waitText('#salvamentoAviso','Não foi possível ler');assert.equal(await guestRaw(p),raw);
+ await replaceTemporary(p);await savedNoticeHidden(p);const recovered=await savedGuestBasket(p);assert.deepEqual(recovered.cesta,incrementedBasket(before,'banana'));
+ await centeredClick(p,'#catalogo [data-mais="banana"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd===recovered.cesta.find(i=>i.g==='banana').qtd+1,5000);await savedNoticeHidden(p);assert.deepEqual((await savedGuestBasket(p)).cesta,incrementedBasket(recovered,'banana'));
+});
+scenario('estado valido com formatacao legada permite gravacoes sucessivas sem falso conflito',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),formatted=JSON.stringify(original,null,2);await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',formatted);await p.driver.navigate().refresh();await p.element('#catalogo');assert.equal(await guestRaw(p),formatted);
+ for(let n=1;n<=2;n++){await centeredClick(p,'#catalogo [data-mais="banana"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd===original.cesta.find(i=>i.g==='banana').qtd+n,5000);await savedNoticeHidden(p);}
+ assert.deepEqual((await savedGuestBasket(p)).cesta,original.cesta.map(i=>i.g==='banana'?{...i,qtd:i.qtd+2,qtdPlena:i.qtd+2}:i));
+});
+scenario('falha de conferencia antes de gravar nao descarta dados e retry detecta mudanca externa',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),raw=await guestRaw(p);
+ await p.driver.executeScript('const original=Storage.prototype.getItem;window.__qaBeforeWriteGet=original;Storage.prototype.getItem=function(key){if(key==="pila.estado.visitante")throw new DOMException("QA denied","SecurityError");return original.call(this,key)}');
+ await centeredClick(p,'#catalogo [data-mais="banana"]');await p.waitText('#salvamentoAviso','Não foi possível conferir');assert.equal(await p.driver.executeScript('return window.__qaBeforeWriteGet.call(localStorage,"pila.estado.visitante")'),raw);
+ const external={...before,cesta:incrementedBasket(before,'tomate')};await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0]);Storage.prototype.getItem=window.__qaBeforeWriteGet',JSON.stringify(external));
+ await p.click('#salvarNovamente');await p.waitText('#salvamentoAviso','alterada em outra aba');assert.deepEqual(await savedGuestBasket(p),external);
+ await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),external);
+});
