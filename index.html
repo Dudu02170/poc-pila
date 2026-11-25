@@ -836,6 +836,20 @@ body.com-barra main{padding-bottom:150px}
         </div>
       </div>
     </details>
+    <details class="dobra" id="dobraCopia" style="max-width:560px">
+      <summary>Restaurar uma cópia de lista</summary>
+      <div class="corpo">
+        <p id="copiaAjuda">Escolha um arquivo JSON de lista do Pila (até 1 MiB). Confira a prévia antes de confirmar. A restauração mantém produtos, quantidades e perfil, mas inicia uma nova compra sem marcações ou código anterior. Não importa contas nem pagamentos.</p>
+        <label for="arquivoCopia">Arquivo da lista</label>
+        <input id="arquivoCopia" type="file" accept=".json,application/json" aria-describedby="copiaAjuda">
+        <p id="restauracaoTexto" role="status" aria-live="polite"></p>
+        <div id="previaCopia" hidden>
+          <p id="resumoCopia"></p><ul id="itensCopia"></ul>
+          <button class="btn btn-p" type="button" id="confirmarCopia" disabled>Restaurar esta cópia</button>
+        </div>
+        <button class="btn btn-v" type="button" id="cancelarCopia">Cancelar seleção</button>
+      </div>
+    </details>
   </div>
 </section>
 
@@ -1291,6 +1305,8 @@ let leituraBloqueada = false;
 let rawInvalido;
 let rawConhecido;
 let conflitoEstado = false;
+let copiaSelecionada = null;
+let leituraCopia = 0;
 function avisoSalvamento(texto, repetir = true){
   $("#salvamentoTexto").textContent = texto;
   $("#salvamentoAviso").hidden = !texto;
@@ -1386,6 +1402,7 @@ function lerEstado(){
   } catch (e) { return { ok:false, raw }; }
 }
 function carregarEstado(resultado = lerEstado()){
+  limparCopia();
   clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false;
   leituraBloqueada = !resultado.ok;
   rawConhecido = resultado.raw; conflitoEstado = false;
@@ -1454,6 +1471,65 @@ $("#usarListaTemporaria").addEventListener("click", () => {
   } catch (e) {
     $("#recuperacaoTexto").textContent = "Não foi possível substituir os dados. A lista continua temporária; mantenha esta aba aberta e tente novamente.";
   }
+});
+
+function limparCopia(){
+  leituraCopia++;
+  copiaSelecionada = null;
+  $("#arquivoCopia").value = "";
+  $("#previaCopia").hidden = true;
+  $("#confirmarCopia").disabled = true;
+  $("#restauracaoTexto").textContent = "";
+  $("#resumoCopia").textContent = "";
+  $("#itensCopia").replaceChildren();
+}
+$("#cancelarCopia").addEventListener("click", limparCopia);
+$("#arquivoCopia").addEventListener("change", async e => {
+  const arquivo = e.target.files[0], dono = USUARIO;
+  limparCopia();
+  if (!arquivo || !dono) return;
+  const tentativa = leituraCopia;
+  if (arquivo.size > 1024 * 1024){
+    $("#restauracaoTexto").textContent = "Arquivo maior que 1 MiB. Nenhuma lista foi alterada."; return;
+  }
+  $("#restauracaoTexto").textContent = "Lendo a cópia local…";
+  try {
+    const valor = JSON.parse(await arquivo.text());
+    if (tentativa !== leituraCopia || USUARIO !== dono) return;
+    if (!estadoLegivel(valor) || !["cesta", "pessoas", "dias", "orcamento"].every(k => Object.hasOwn(valor, k)) ||
+        !["vendido", "barato", "caro"].includes(valor.filtro ?? "vendido") ||
+        !["caixa", "totem"].includes(valor.canal ?? "caixa")) throw new Error("Cópia incompatível");
+    copiaSelecionada = { dono, valor };
+    $("#resumoCopia").textContent = `${valor.cesta.length} produtos · ${valor.pessoas} pessoas · ${valor.dias} dias · Orçamento: ${valor.orcamento === null ? "não definido" : real(valor.orcamento)}`;
+    $("#itensCopia").replaceChildren(...valor.cesta.map(item => {
+      const li = document.createElement("li");
+      li.textContent = `${GRUPO[item.g].nome}: ${item.qtd}`; return li;
+    }));
+    $("#previaCopia").hidden = false;
+    $("#confirmarCopia").disabled = false;
+    $("#restauracaoTexto").textContent = "Cópia válida. Confira os produtos e quantidades. Nada foi substituído; a restauração usará o catálogo fictício atual.";
+  } catch (e) {
+    if (tentativa !== leituraCopia || USUARIO !== dono) return;
+    $("#restauracaoTexto").textContent = "Não foi possível ler uma cópia compatível. Nenhuma lista foi alterada. Escolha outro arquivo.";
+  }
+});
+$("#confirmarCopia").addEventListener("click", () => {
+  if (!copiaSelecionada || copiaSelecionada.dono !== USUARIO) return;
+  if (leituraBloqueada || conflitoEstado){
+    $("#restauracaoTexto").textContent = "Resolva o aviso de leitura ou conflito antes de restaurar. A lista desta aba não foi substituída."; return;
+  }
+  if (!confirm("Restaurar esta cópia como nova compra? A lista e as edições atuais serão substituídas. Marcações e código anterior serão limpos. Confira e guarde uma cópia do trabalho atual antes de continuar.")) return;
+  const valor = copiaSelecionada.valor;
+  S = Object.assign(ESTADO_ZERO(), valor, {
+    cesta:valor.cesta.map(i => ({ ...i, pego:false, faltou:false })),
+    codigo:null, receita:null, corredorAtual:null, ajuste:null,
+    busca:"", buscaMerc:"", abreBusca:false, abreLista:false,
+    modo:"casa", tipoRec:"todos", aba:"carrinho", montada:valor.cesta.length > 0
+  });
+  estadoPendente = true;
+  salvarAgora();
+  limparCopia();
+  ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
 });
 
 /* ── preço e catálogo ─────────────────────────────────────── */

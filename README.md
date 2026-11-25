@@ -31,6 +31,13 @@ Se a lista salva não puder ser lida ou tiver formato incompatível, a aplicaç�
 
 Antes de gravar uma lista do usuário, o Pila confere se o conteúdo salvo ainda é aquele lido por esta aba. Se outra aba já o alterou, mantém as edições locais em memória e oferece **Recarregar lista salva**, com confirmação antes de substituí-las. Antes de recarregar, **Baixar lista desta aba** permite guardar os campos e itens temporários em `pila-lista-desta-aba.json`. A mesma ação aparece quando uma edição não pode ser gravada ou a lista salva não pode ser lida. Ela copia somente a lista em memória, sem consultar/substituir o armazenamento nem incluir cadastro/sessão. Confira o arquivo: o download é apenas solicitado, não há importação automática e a cópia não libera a saída com pendências. Depois de conferir a lista atual, reaplique a edição desejada. A conferência é sequencial: ainda não garante exclusão mútua entre escritas simultâneas de abas diferentes.
 
+## Restaurar uma cópia como nova compra
+Na etapa **Orçamento**, abra **Restaurar uma cópia de lista** e escolha um JSON de lista do Pila com até 1 MiB. Confira produtos, quantidades, pessoas, dias e orçamento na prévia; selecionar o arquivo não substitui a lista. **Restaurar esta cópia** pede confirmação para substituir a lista e as edições atuais. Guarde seu trabalho antes de continuar; **Cancelar seleção** limpa apenas a prévia.
+
+A restauração mantém produtos/quantidades/atributos, perfil, orçamento, marcas, canal e metadados da lista. Inicia uma nova compra: limpa marcações de pego/não encontrado, código, ajuste e navegação anteriores. Usa o catálogo fictício atual; não restaura preços históricos, contas ou pagamentos. Arquivo inválido/incompatível ou acima do limite é recusado. Não há envio do arquivo para servidor.
+
+Avisos de leitura inválida ou conflito precisam ser resolvidos antes de restaurar. Uma mudança externa detectada ao gravar preserva os dados salvos e deixa a cópia confirmada em memória, com o aviso existente. Se a gravação falhar, não feche a aba: tente salvar novamente ou baixe a lista desta aba. Cancelar não altera a compra. A comparação continua sequencial, sem exclusão mútua de escritas simultâneas. Critérios e limites em `qa/KNOWN_ISSUES.md`.
+
 ## Reutilizar uma lista
 Na tela Pagamento, **Reutilizar esta lista** mantém os produtos, quantidades, orçamento, perfil da casa e escolha de marcas. Após confirmação, limpa as marcações de pego/não encontrado, o código anterior e a navegação da compra; volta à cesta em casa para revisar e editar. Cancelar mantém a compra atual. **Começar nova compra** continua apagando a cesta após confirmação.
 

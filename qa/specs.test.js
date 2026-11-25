@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { scenario, assert, until } from './support.js';
 async function guest(p) { await p.open(); await p.click('#btVisitante'); await p.element('#orc'); }
@@ -436,4 +436,66 @@ scenario('falha de download informa erro conserva edicao e permite nova copia re
  await failStateWrites(p);await centeredClick(p,'#catalogo [data-mais="banana"]');await p.waitText('#salvamentoAviso','Não foi possível salvar');const displayed=await visibleBasket(p),files=await readdir(p.downloadDir);
  await p.driver.executeScript('window.__qaDraftURL=URL.createObjectURL;URL.createObjectURL=()=>{throw new Error("QA download indisponível")}');await p.click('#copiarListaDaAba');await p.waitText('#recuperacaoTexto','Não foi possível solicitar a lista desta aba');assert.deepEqual(await readdir(p.downloadDir),files);assert.deepEqual(await savedGuestBasket(p),before);assert.deepEqual(await visibleBasket(p),displayed);assert.equal(await localSession(p),'visitante');
  await p.driver.executeScript('URL.createObjectURL=window.__qaDraftURL');const file=await downloadedDraft(p,expected);assert.deepEqual(JSON.parse(await readFile(file,'utf8')),expected);assert.deepEqual(await savedGuestBasket(p),before);assert.deepEqual(await visibleBasket(p),displayed);
+});
+
+let copyInputNumber=0;
+async function openCopy(p){
+ if(!(await p.driver.getCurrentUrl()).endsWith('#/casa/plano'))await p.click('#trilhaWrap [data-rota="#/casa/plano"]');
+ await p.element('#orc');if(!await p.driver.executeScript('return document.getElementById("dobraCopia").open'))await centeredClick(p,'#dobraCopia summary');
+}
+async function chooseCopyFile(p,path){await openCopy(p);await (await p.element('#arquivoCopia')).sendKeys(path);}
+async function chooseCopy(p,raw,name='copia'){
+ const path=join(p.downloadDir,`${name}-${++copyInputNumber}.json`);await writeFile(path,raw,'utf8');await chooseCopyFile(p,path);return path;
+}
+const restoredCopy=before=>({...before,cesta:before.cesta.map(i=>({...i,pego:false,faltou:false})),codigo:null,receita:null,corredorAtual:null,ajuste:null,buscaMerc:'',abreBusca:false,abreLista:false,modo:'casa',tipoRec:'todos',aba:'carrinho',montada:before.cesta.length>0});
+const acceptCopy=async p=>{await centeredClick(p,'#confirmarCopia');await p.alert(/lista e as edições atuais serão substituídas/);};
+scenario('restaura arquivo realmente baixado somente apos previa e confirmacao',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),copy={...original,cesta:incrementedBasket(original,'banana')};await failStateWrites(p);await centeredClick(p,'#catalogo [data-mais="banana"]');await p.waitText('#salvamentoAviso','Não foi possível salvar');const file=await downloadedDraft(p,copy);
+ await restoreStateWrites(p);await p.click('#salvarNovamente');await savedNoticeHidden(p);await centeredClick(p,'#catalogo [data-mais="tomate"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='tomate').qtd===copy.cesta.find(i=>i.g==='tomate').qtd+1,5000);const current=await savedGuestBasket(p);
+ await chooseCopyFile(p,file);await p.waitText('#restauracaoTexto','Cópia válida');await p.waitText('#resumoCopia',copy.cesta.length+' produtos');await p.waitText('#itensCopia','Banana');assert.deepEqual(await savedGuestBasket(p),current);
+ await acceptCopy(p);await p.element('#catalogo');await savedNoticeHidden(p);const expected=restoredCopy(copy);assert.deepEqual(await savedGuestBasket(p),expected);assert.deepEqual(JSON.parse(await readFile(file,'utf8')),copy);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),expected);assert.equal((await visibleBasket(p)).find(i=>i.g==='banana').qtd,copy.cesta.find(i=>i.g==='banana').qtd);
+});
+scenario('cancelar confirmacao ou selecao da copia nao muda lista nem sessao',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),copy={...original,cesta:incrementedBasket(original,'banana')};await chooseCopy(p,JSON.stringify(copy));await p.waitText('#restauracaoTexto','Cópia válida');
+ await centeredClick(p,'#confirmarCopia');const dialog=await p.driver.wait(until.alertIsPresent(),10000);assert.match(await dialog.getText(),/como nova compra/);await dialog.dismiss();assert.deepEqual(await savedGuestBasket(p),original);assert.equal(await localSession(p),'visitante');
+ await centeredClick(p,'#cancelarCopia');assert.equal(await p.driver.executeScript('return document.getElementById("previaCopia").hidden&&document.getElementById("confirmarCopia").disabled'),true);assert.deepEqual(await savedGuestBasket(p),original);
+ await chooseCopy(p,JSON.stringify(copy));await p.waitText('#restauracaoTexto','Cópia válida');assert.deepEqual(await savedGuestBasket(p),original);
+});
+for(const [name,invalid] of [
+ ['JSON quebrado',()=>'{inválido QA'],
+ ['objeto sem lista',()=>'{}'],
+ ['grupo desconhecido',s=>JSON.stringify({...s,cesta:[{g:'nao-existe-qa',qtd:1}]})],
+ ['quantidade textual',s=>JSON.stringify({...s,cesta:[{g:'banana',qtd:'2'}]})],
+ ['grupo duplicado',s=>JSON.stringify({...s,cesta:[s.cesta[0],s.cesta[0]]})],
+ ['chave de prototipo',s=>JSON.stringify(s).replace('{','{"__proto__":{"qa":"recusar"},')]
+])scenario('restauracao rejeita '+name+' sem perder lista atual',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p);await chooseCopy(p,invalid(before));await p.waitText('#restauracaoTexto','Nenhuma lista foi alterada');assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await localSession(p),'visitante');assert.equal(await p.driver.executeScript('return document.getElementById("confirmarCopia").disabled&&document.getElementById("previaCopia").hidden'),true);
+});
+scenario('restauracao recusa arquivo acima de um MiB antes de oferecer confirmacao',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p);await chooseCopy(p,' '.repeat(1024*1024+1));await p.waitText('#restauracaoTexto','Arquivo maior que 1 MiB');assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await p.driver.executeScript('return document.getElementById("confirmarCopia").disabled'),true);
+});
+scenario('restauracao com escrita negada conserva copia em memoria e permite retry',async p=>{
+ await guest(p);await basket(p);const original=await savedGuestBasket(p),copy={...original,metadataQA:'Cópia QA',cesta:incrementedBasket(original,'banana')};await chooseCopy(p,JSON.stringify(copy));await p.waitText('#restauracaoTexto','Cópia válida');await failStateWrites(p);await acceptCopy(p);await p.element('#catalogo');await p.waitText('#salvamentoAviso','Não foi possível salvar');assert.deepEqual(await savedGuestBasket(p),original);assert.equal((await visibleBasket(p)).find(i=>i.g==='banana').qtd,copy.cesta.find(i=>i.g==='banana').qtd);
+ await p.click('#sair');await p.waitText('#salvamentoAviso','Não foi possível salvar');assert.equal(await localSession(p),'visitante');await restoreStateWrites(p);await p.click('#salvarNovamente');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),restoredCopy(copy));
+});
+scenario('restauracao antiga nao sobrescreve escrita externa ocorrida depois da previa',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),copy={...before,cesta:incrementedBasket(before,'banana')},a=await p.driver.getWindowHandle();await chooseCopy(p,JSON.stringify(copy));await p.waitText('#restauracaoTexto','Cópia válida');await secondGuestTab(p);await centeredClick(p,'#catalogo [data-mais="tomate"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='tomate').qtd===before.cesta.find(i=>i.g==='tomate').qtd+1,5000);const external=await savedGuestBasket(p);
+ await p.driver.switchTo().window(a);await acceptCopy(p);await p.element('#catalogo');await p.waitText('#salvamentoAviso','alterada em outra aba');assert.deepEqual(await savedGuestBasket(p),external);assert.equal((await visibleBasket(p)).find(i=>i.g==='banana').qtd,copy.cesta.find(i=>i.g==='banana').qtd);assert.equal(await localSession(p),'visitante');
+});
+scenario('restauracao da conta limpa marcacoes e codigo sem alterar visitante ou cadastro',async p=>{
+ const {before:visitor}=await shoppingForReuse(p);await p.click('#sair');await p.element('#formEntrar');await register(p);const accounts=await localAccounts(p),id=accounts[0].id,copy={...visitor,codigo:'<img src=x onerror="window.qaInjecao=true">',metadataQA:'Preservar QA'},accountBefore=await storedState(p,id);
+ await chooseCopy(p,JSON.stringify(copy));await p.waitText('#restauracaoTexto','Cópia válida');assert.deepEqual(await storedState(p,id),accountBefore);await acceptCopy(p);await p.element('#catalogo');await savedNoticeHidden(p);assert.deepEqual(await storedState(p,id),restoredCopy(copy));assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);assert.equal(await localSession(p),id);assert.equal(await p.driver.executeScript('return window.qaInjecao===true'),false);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await storedState(p,id),restoredCopy(copy));
+});
+scenario('restauracao nao contorna bloqueio de leitura da lista salva',async p=>{
+ await guest(p);await basket(p);const copy=await savedGuestBasket(p),raw='{dados antigos QA';await corruptGuest(p,raw);await chooseCopy(p,JSON.stringify(copy));await p.waitText('#restauracaoTexto','Cópia válida');await centeredClick(p,'#confirmarCopia');await p.waitText('#restauracaoTexto','Resolva o aviso de leitura ou conflito');assert.equal(await guestRaw(p),raw);assert.equal(await localSession(p),'visitante');assert.equal(await p.driver.executeScript('return document.getElementById("usarListaTemporaria").hidden'),false);
+});
+scenario('leitura de arquivo falha sem trocar lista e nova selecao recupera previa',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p);await p.driver.executeScript('window.__qaFileText=File.prototype.text;File.prototype.text=function(){return Promise.reject(new Error("QA leitura negada"))}');await chooseCopy(p,JSON.stringify(before));await p.waitText('#restauracaoTexto','Não foi possível ler uma cópia compatível');assert.deepEqual(await savedGuestBasket(p),before);
+ await p.driver.executeScript('File.prototype.text=window.__qaFileText');await chooseCopy(p,JSON.stringify(before));await p.waitText('#restauracaoTexto','Cópia válida');assert.deepEqual(await savedGuestBasket(p),before);
+});
+scenario('arquivo antigo concluido depois de cancelar nao substitui a nova selecao',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),old={...before,pessoas:3},current={...before,pessoas:4};await p.driver.executeScript('const original=File.prototype.text;File.prototype.text=function(){const text=original.call(this);return this.name.startsWith("slow-")?new Promise(resolve=>{window.__qaReleaseCopy=()=>resolve(text)}):text}');
+ await chooseCopy(p,JSON.stringify(old),'slow');await p.waitText('#restauracaoTexto','Lendo a cópia local');await centeredClick(p,'#cancelarCopia');await chooseCopy(p,JSON.stringify(current));await p.waitText('#restauracaoTexto','Cópia válida');await p.driver.executeScript('window.__qaReleaseCopy()');await p.waitText('#resumoCopia','4 pessoas');assert.deepEqual(await savedGuestBasket(p),before);await acceptCopy(p);await p.element('#catalogo');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),restoredCopy(current));
 });
