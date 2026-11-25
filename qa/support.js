@@ -4,6 +4,7 @@ import { Builder, By, until, Select } from 'selenium-webdriver';
 import chrome from 'selenium-webdriver/chrome.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { startServer } from './server.js';
+import { resolve } from 'node:path';
 
 let server;
 before(async () => { server = await startServer(); });
@@ -12,11 +13,14 @@ after(async () => { await server?.close(); });
 export { assert, By, until, Select };
 export function scenario(name, body) {
   test(name, { timeout: 90000 }, async () => {
+    const downloadDir=resolve('reports','downloads',name.replace(/[^a-zA-Z0-9-]/g,'_').slice(0,100));
+    await mkdir(downloadDir,{recursive:true});
     const options = new chrome.Options().addArguments(
       '--disable-dev-shm-usage', '--window-size=1440,1000',
       '--disable-background-networking',
       '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'
     );
+    options.setUserPreferences({'download.default_directory':downloadDir,'download.prompt_for_download':false,'download.directory_upgrade':true});
     if (process.env.CI) options.addArguments('--no-sandbox');
     if (process.env.HEADLESS !== 'false') options.addArguments('--headless=new');
     if (process.env.CHROME_BINARY) options.setChromeBinaryPath(process.env.CHROME_BINARY);
@@ -30,12 +34,18 @@ export function scenario(name, body) {
     try {
       await driver.manage().setTimeouts({ implicit: 0, pageLoad: 20000, script: 10000 });
       const p = {
-        driver,
+        driver,downloadDir,
         async open(path = '/') { await driver.get(server.url + path); },
         async element(css) {
-          const e = await driver.wait(until.elementLocated(By.css(css)), 10000, css);
-          await driver.wait(until.elementIsVisible(e), 10000, css);
-          return e;
+          return driver.wait(async () => {
+            try {
+              const e = await driver.findElement(By.css(css));
+              return await e.isDisplayed() ? e : false;
+            } catch (error) {
+              if (['NoSuchElementError','StaleElementReferenceError'].includes(error.name)) return false;
+              throw error;
+            }
+          }, 10000, css);
         },
         async click(css) { await (await this.element(css)).click(); },
         async fill(css, value) {
@@ -50,7 +60,10 @@ export function scenario(name, body) {
           catch (e) { if (!String(e.message).includes('Cannot locate option')) throw e; await select.selectByVisibleText(value); }
         },
         async waitText(css, expected) {
-          await driver.wait(async () => (await this.text(css)).toLocaleLowerCase('pt-BR').includes(expected.toLocaleLowerCase('pt-BR')), 10000, css + ': ' + expected);
+          await driver.wait(async () => {
+            try { return (await this.text(css)).toLocaleLowerCase('pt-BR').includes(expected.toLocaleLowerCase('pt-BR')); }
+            catch (error) { if (error.name === 'StaleElementReferenceError') return false; throw error; }
+          }, 10000, css + ': ' + expected);
         },
         async alert(text, answer) {
           const a = await driver.wait(until.alertIsPresent(), 10000);

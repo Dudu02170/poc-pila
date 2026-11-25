@@ -97,6 +97,12 @@ b,strong{font-weight:600}
 .topo{background:var(--vm);color:#fff;position:sticky;top:0;z-index:60;
   box-shadow:0 1px 0 rgba(0,0,0,.15);padding-top:env(safe-area-inset-top)}
 .topo[hidden]{display:none}
+#salvamentoAviso{background:#FFF1D6;color:#332C29;flex-wrap:wrap}
+#salvamentoAviso[hidden],#salvarNovamente[hidden],#lerNovamente[hidden],#copiarListaInvalida[hidden],#usarListaTemporaria[hidden]{display:none}
+#salvamentoAviso p{flex:1;min-width:200px;margin:0;font-size:14px}
+#salvarNovamente,#lerNovamente,#copiarListaInvalida,#usarListaTemporaria{font:inherit;padding:8px 12px;border:1px solid #665744;border-radius:8px;background:#fff;cursor:pointer}
+#salvamentoAviso #recuperacaoTexto{flex-basis:100%;min-width:0;font-size:13px}
+#salvamentoAviso #recuperacaoTexto:empty{display:none}
 .topo .wrap{display:flex;align-items:center;gap:14px;padding:9px 18px;flex-wrap:wrap}
 .logo{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:30px;
   text-transform:uppercase;letter-spacing:.06em;line-height:1;
@@ -626,6 +632,14 @@ body.com-barra main{padding-bottom:150px}
       <button id="sair">Sair</button>
     </div>
   </div>
+  <div class="wrap" id="salvamentoAviso" role="alert" hidden>
+    <p id="salvamentoTexto"></p><button type="button" id="salvarNovamente">Tentar salvar lista</button>
+    <button type="button" id="lerNovamente" hidden>Tentar ler lista</button>
+    <button type="button" id="copiarListaDaAba" hidden>Baixar lista desta aba</button>
+    <button type="button" id="copiarListaInvalida" hidden>Baixar cópia local</button>
+    <button type="button" id="usarListaTemporaria" hidden>Usar lista temporária</button>
+    <p id="recuperacaoTexto" role="status" aria-live="polite"></p>
+  </div>
 </header>
 
 <nav class="trilha" id="trilha" hidden aria-label="Etapas do planejamento">
@@ -822,6 +836,23 @@ body.com-barra main{padding-bottom:150px}
         </div>
       </div>
     </details>
+    <details class="dobra" id="dobraCopia" style="max-width:560px">
+      <summary>Guardar ou restaurar uma lista</summary>
+      <div class="corpo">
+        <p id="copiaAtualAjuda">Guarde uma cópia dos campos e itens atuais desta aba antes de substituir a lista ou começar outra compra. Confira o arquivo baixado; ele não inclui contas nem confirma pagamentos.</p>
+        <button class="btn btn-v" type="button" id="copiarListaAtual" aria-describedby="copiaAtualAjuda">Baixar lista atual</button>
+        <p id="copiaAtualTexto" role="status" aria-live="polite"></p>
+        <p id="copiaAjuda">Escolha um arquivo JSON de lista do Pila (até 1 MiB). Confira a prévia antes de confirmar. A restauração mantém produtos, quantidades e perfil, mas inicia uma nova compra sem marcações ou código anterior. Não importa contas nem pagamentos.</p>
+        <label for="arquivoCopia">Arquivo da lista</label>
+        <input id="arquivoCopia" type="file" accept=".json,application/json" aria-describedby="copiaAjuda">
+        <p id="restauracaoTexto" role="status" aria-live="polite"></p>
+        <div id="previaCopia" hidden>
+          <p id="resumoCopia"></p><ul id="itensCopia"></ul>
+          <button class="btn btn-p" type="button" id="confirmarCopia" disabled>Restaurar esta cópia</button>
+        </div>
+        <button class="btn btn-v" type="button" id="cancelarCopia">Cancelar seleção</button>
+      </div>
+    </details>
   </div>
 </section>
 
@@ -942,8 +973,10 @@ body.com-barra main{padding-bottom:150px}
             e recebe a lista e o valor do servidor da loja — o preço nunca viaja dentro do código,
             então ninguém consegue forjar um QR mais barato.</p>
         </div>
+        <p class="sub" id="reutilizarAjuda">Reutilizar mantém os produtos, quantidades e orçamento para outra compra. Limpa as marcações de pego/não encontrado e o código anterior, após confirmação.</p>
         <div class="linha-btn">
           <button class="btn btn-n" data-rota="#/mercado/rota">Voltar à lista</button>
+          <button class="btn btn-v" id="reutilizarLista" aria-describedby="reutilizarAjuda">Reutilizar esta lista</button>
           <button class="btn btn-n" id="novaCompra">Começar nova compra</button>
         </div>
       </div>
@@ -1235,14 +1268,15 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 
 /* ── armazenamento local ──────────────────────────────────── */
 const Armazem = {
-  ok: (() => { try { localStorage.setItem("_t", "1"); localStorage.removeItem("_t"); return true; }
-               catch (e) { return false; } })(),
-  ler(chave, padrao){ if (!this.ok) return padrao;
+  ler(chave, padrao){
     try { const v = localStorage.getItem("pila." + chave); return v ? JSON.parse(v) : padrao; }
     catch (e) { return padrao; } },
-  grava(chave, valor){ if (!this.ok) return;
-    try { localStorage.setItem("pila." + chave, JSON.stringify(valor)); } catch (e) {} },
-  apaga(chave){ if (this.ok) localStorage.removeItem("pila." + chave); }
+  grava(chave, valor){
+    try { localStorage.setItem("pila." + chave, JSON.stringify(valor)); return true; }
+    catch (e) { return false; } },
+  apaga(chave){
+    try { localStorage.removeItem("pila." + chave); return true; }
+    catch (e) { return false; } }
 };
 
 /* Hash de senha. Num sistema real isso acontece NO SERVIDOR, com bcrypt ou argon2.
@@ -1269,19 +1303,243 @@ let S = ESTADO_ZERO();
 let USUARIO = null;
 
 let salvaTimer = null;
+let estadoPendente = false;
+let leituraBloqueada = false;
+let rawInvalido;
+let rawConhecido;
+let conflitoEstado = false;
+let copiaSelecionada = null;
+let leituraCopia = 0;
+function avisoSalvamento(texto, repetir = true){
+  $("#salvamentoTexto").textContent = texto;
+  $("#salvamentoAviso").hidden = !texto;
+  $("#salvarNovamente").hidden = !repetir;
+  $("#lerNovamente").hidden = true;
+  $("#lerNovamente").textContent = "Tentar ler lista";
+  $("#copiarListaDaAba").hidden = !texto || !USUARIO || !estadoPendente;
+  $("#copiarListaInvalida").hidden = true;
+  $("#usarListaTemporaria").hidden = true;
+  if (!texto) $("#recuperacaoTexto").textContent = "";
+  medirTopo();
+}
+function avisoLeitura(){
+  avisoSalvamento("Não foi possível ler a lista salva. Os dados anteriores não foram alterados. A lista desta aba é temporária; tente ler novamente antes de salvar.", false);
+  $("#lerNovamente").hidden = false;
+  $("#copiarListaInvalida").hidden = typeof rawInvalido !== "string";
+  $("#usarListaTemporaria").hidden = typeof rawInvalido !== "string";
+  medirTopo();
+}
+function avisoConflito(){
+  avisoSalvamento("A lista salva foi alterada em outra aba. Suas alterações estão só na memória desta aba. Recarregue e confira a lista salva antes de editar novamente.", false);
+  $("#lerNovamente").hidden = false;
+  $("#lerNovamente").textContent = "Recarregar lista salva";
+  medirTopo();
+}
+function salvarAgora(){
+  clearTimeout(salvaTimer);
+  salvaTimer = null;
+  if (leituraBloqueada){ estadoPendente = true; avisoLeitura(); return false; }
+  if (conflitoEstado){ estadoPendente = true; avisoConflito(); return false; }
+  if (USUARIO){
+    try {
+      if (localStorage.getItem("pila.estado." + USUARIO.id) !== rawConhecido){
+        estadoPendente = true; conflitoEstado = true; avisoConflito(); return false;
+      }
+    } catch (e) {
+      estadoPendente = true;
+      avisoSalvamento("Não foi possível conferir a lista salva. Suas alterações estão só na memória desta aba. Mantenha a aba aberta e tente novamente.");
+      return false;
+    }
+  }
+  const { busca, ...resto } = S;
+  const gravou = Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
+  estadoPendente = !gravou;
+  if (gravou) rawConhecido = JSON.stringify(resto);
+  avisoSalvamento(gravou ? "" : "Não foi possível salvar a lista neste navegador. As alterações estão só na memória desta aba. Mantenha a aba aberta e tente novamente.");
+  return gravou;
+}
 function salvar(){
   clearTimeout(salvaTimer);
-  salvaTimer = setTimeout(() => {
-    const { busca, ...resto } = S;
-    Armazem.grava("estado" + (USUARIO ? "." + USUARIO.id : ""), resto);
-  }, 120);
+  estadoPendente = true;
+  salvaTimer = setTimeout(salvarAgora, 120);
 }
-function carregarEstado(){
-  const salvo = Armazem.ler("estado" + (USUARIO ? "." + USUARIO.id : ""), null);
+$("#salvarNovamente").addEventListener("click", () => { if (USUARIO) salvarAgora(); });
+addEventListener("pagehide", () => { if (estadoPendente) salvarAgora(); });
+function estadoLegivel(d){
+  const objeto = v => !!v && typeof v === "object" && !Array.isArray(v);
+  const positivo = v => typeof v === "number" && Number.isFinite(v) && v > 0;
+  const grupo = g => typeof g === "string" && Object.hasOwn(GRUPO, g);
+  if (!objeto(d) || ["__proto__", "constructor", "prototype"].some(k => Object.hasOwn(d, k))) return false;
+  for (const [k, v] of Object.entries(ESTADO_ZERO())){
+    if (!Object.hasOwn(d, k) || v === null) continue;
+    if (Array.isArray(v) ? !Array.isArray(d[k]) : typeof d[k] !== typeof v) return false;
+  }
+  if (["pessoas", "dias"].some(k => Object.hasOwn(d, k) && !positivo(d[k]))) return false;
+  if (d.orcamento != null && (typeof d.orcamento !== "number" || !Number.isFinite(d.orcamento) || d.orcamento < 0)) return false;
+  if (["receita", "codigo"].some(k => d[k] != null && typeof d[k] !== "string")) return false;
+  if (d.corredorAtual != null && !Object.hasOwn(CORR, d.corredorAtual)) return false;
+  if (d.restricoes && !d.restricoes.every(r => ["lactose", "gluten", "carne", "acucar"].includes(r))) return false;
+  if (d.extras && !d.extras.every(grupo)) return false;
+  const ids = new Set();
+  if (d.cesta && !d.cesta.every(i => {
+    if (!objeto(i) || !grupo(i.g) || ids.has(i.g) || !positivo(i.qtd)) return false;
+    ids.add(i.g);
+    return (i.qtdPlena === undefined || positivo(i.qtdPlena)) &&
+      ["protegido", "eco", "pego", "faltou", "daReceita"].every(k => i[k] === undefined || typeof i[k] === "boolean") &&
+      (i.trocado == null || grupo(i.trocado));
+  })) return false;
+  if (d.ajuste != null && (!objeto(d.ajuste) || (d.ajuste.ativo !== undefined && typeof d.ajuste.ativo !== "boolean") ||
+      (d.ajuste.marcas !== undefined && (typeof d.ajuste.marcas !== "number" || !Number.isFinite(d.ajuste.marcas) || d.ajuste.marcas < 0)) ||
+      (d.ajuste.ativo && (!Array.isArray(d.ajuste.quantidades) || !d.ajuste.quantidades.every(grupo) ||
+        !Array.isArray(d.ajuste.removidos) || !d.ajuste.removidos.every(v => typeof v === "string"))))) return false;
+  return true;
+}
+function lerEstado(){
+  let raw;
+  try {
+    raw = localStorage.getItem("pila.estado" + (USUARIO ? "." + USUARIO.id : ""));
+    if (raw === null) return { ok:true, valor:null, raw };
+    const valor = JSON.parse(raw);
+    if (!estadoLegivel(valor)) throw new Error("Estado inválido");
+    return { ok:true, valor, raw };
+  } catch (e) { return { ok:false, raw }; }
+}
+function carregarEstado(resultado = lerEstado()){
+  limparCopia();
+  $("#copiaAtualTexto").textContent = "";
+  clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false;
+  leituraBloqueada = !resultado.ok;
+  rawConhecido = resultado.raw; conflitoEstado = false;
+  rawInvalido = leituraBloqueada ? resultado.raw : undefined;
+  if (leituraBloqueada) avisoLeitura(); else avisoSalvamento("");
+  const salvo = resultado.ok ? resultado.valor : null;
   S = Object.assign(ESTADO_ZERO(), salvo || {});
   S.busca = "";
   if (USUARIO && USUARIO.pessoas && !salvo) S.pessoas = USUARIO.pessoas;
 }
+$("#lerNovamente").addEventListener("click", () => {
+  if (!USUARIO || (!leituraBloqueada && !conflitoEstado)) return;
+  if (estadoPendente && !confirm("Tentar reler a lista salva? Se a leitura funcionar, as alterações temporárias desta aba serão substituídas pelos dados salvos.")) return;
+  const resultado = lerEstado();
+  if (!resultado.ok){ leituraBloqueada = true; conflitoEstado = false; rawConhecido = undefined; rawInvalido = resultado.raw; avisoLeitura(); return; }
+  carregarEstado(resultado); ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
+});
+$("#copiarListaInvalida").addEventListener("click", () => {
+  if (!USUARIO || !leituraBloqueada || typeof rawInvalido !== "string") return;
+  let url;
+  try {
+    const raw = localStorage.getItem("pila.estado." + USUARIO.id);
+    if (raw === null) throw new Error("Sem dados");
+    url = URL.createObjectURL(new Blob([raw], { type:"application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "pila-lista-local.json"; link.hidden = true;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $("#recuperacaoTexto").textContent = "Download solicitado. Confira a cópia antes de substituir os dados inválidos. O arquivo não é reparado nem importado.";
+  } catch (e) {
+    if (url) URL.revokeObjectURL(url);
+    $("#recuperacaoTexto").textContent = "Não foi possível solicitar a cópia. Os dados não foram alterados.";
+  }
+});
+function baixarListaDaAba(status){
+  if (!USUARIO) return;
+  const texto = $(status);
+  let url;
+  try {
+    const { busca, ...resto } = S;
+    const raw = JSON.stringify(resto, null, 2);
+    url = URL.createObjectURL(new Blob([raw], { type:"application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "pila-lista-desta-aba.json"; link.hidden = true;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    texto.textContent = "Download da lista desta aba solicitado. Confira o arquivo antes de recarregar ou fechar. A lista salva não foi alterada. Não há importação automática.";
+  } catch (e) {
+    if (url) URL.revokeObjectURL(url);
+    texto.textContent = "Não foi possível solicitar a lista desta aba. Mantenha a aba aberta e tente novamente; os dados não foram alterados.";
+  }
+  medirTopo();
+}
+$("#copiarListaDaAba").addEventListener("click", () => {
+  if (estadoPendente) baixarListaDaAba("#recuperacaoTexto");
+});
+$("#copiarListaAtual").addEventListener("click", () => baixarListaDaAba("#copiaAtualTexto"));
+$("#usarListaTemporaria").addEventListener("click", () => {
+  if (!USUARIO || !leituraBloqueada || typeof rawInvalido !== "string") return;
+  const esperado = rawInvalido;
+  if (!confirm("Substituir os dados inválidos pela lista temporária desta aba? Os dados anteriores serão descartados. Baixe e confira uma cópia antes. Os campos e itens atuais serão mantidos.")) return;
+  try {
+    if (localStorage.getItem("pila.estado." + USUARIO.id) !== esperado){
+      $("#recuperacaoTexto").textContent = "Os dados salvos mudaram. Use Tentar ler lista e confira os dados atuais antes de substituir."; return;
+    }
+    const { busca, ...resto } = S;
+    if (!Armazem.grava("estado." + USUARIO.id, resto)) throw new Error("Gravação indisponível");
+    rawConhecido = JSON.stringify(resto); conflitoEstado = false;
+    clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false; leituraBloqueada = false; rawInvalido = undefined;
+    avisoSalvamento("");
+  } catch (e) {
+    $("#recuperacaoTexto").textContent = "Não foi possível substituir os dados. A lista continua temporária; mantenha esta aba aberta e tente novamente.";
+  }
+});
+
+function limparCopia(){
+  leituraCopia++;
+  copiaSelecionada = null;
+  $("#arquivoCopia").value = "";
+  $("#previaCopia").hidden = true;
+  $("#confirmarCopia").disabled = true;
+  $("#restauracaoTexto").textContent = "";
+  $("#resumoCopia").textContent = "";
+  $("#itensCopia").replaceChildren();
+}
+$("#cancelarCopia").addEventListener("click", limparCopia);
+$("#arquivoCopia").addEventListener("change", async e => {
+  const arquivo = e.target.files[0], dono = USUARIO;
+  limparCopia();
+  if (!arquivo || !dono) return;
+  const tentativa = leituraCopia;
+  if (arquivo.size > 1024 * 1024){
+    $("#restauracaoTexto").textContent = "Arquivo maior que 1 MiB. Nenhuma lista foi alterada."; return;
+  }
+  $("#restauracaoTexto").textContent = "Lendo a cópia local…";
+  try {
+    const valor = JSON.parse(await arquivo.text());
+    if (tentativa !== leituraCopia || USUARIO !== dono) return;
+    if (!estadoLegivel(valor) || !["cesta", "pessoas", "dias", "orcamento"].every(k => Object.hasOwn(valor, k)) ||
+        !["vendido", "barato", "caro"].includes(valor.filtro ?? "vendido") ||
+        !["caixa", "totem"].includes(valor.canal ?? "caixa")) throw new Error("Cópia incompatível");
+    copiaSelecionada = { dono, valor };
+    $("#resumoCopia").textContent = `${valor.cesta.length} produtos · ${valor.pessoas} pessoas · ${valor.dias} dias · Orçamento: ${valor.orcamento === null ? "não definido" : real(valor.orcamento)}`;
+    $("#itensCopia").replaceChildren(...valor.cesta.map(item => {
+      const li = document.createElement("li");
+      li.textContent = `${GRUPO[item.g].nome}: ${item.qtd}`; return li;
+    }));
+    $("#previaCopia").hidden = false;
+    $("#confirmarCopia").disabled = false;
+    $("#restauracaoTexto").textContent = "Cópia válida. Confira os produtos e quantidades. Nada foi substituído; a restauração usará o catálogo fictício atual.";
+  } catch (e) {
+    if (tentativa !== leituraCopia || USUARIO !== dono) return;
+    $("#restauracaoTexto").textContent = "Não foi possível ler uma cópia compatível. Nenhuma lista foi alterada. Escolha outro arquivo.";
+  }
+});
+$("#confirmarCopia").addEventListener("click", () => {
+  if (!copiaSelecionada || copiaSelecionada.dono !== USUARIO) return;
+  if (leituraBloqueada || conflitoEstado){
+    $("#restauracaoTexto").textContent = "Resolva o aviso de leitura ou conflito antes de restaurar. A lista desta aba não foi substituída."; return;
+  }
+  if (!confirm("Restaurar esta cópia como nova compra? A lista e as edições atuais serão substituídas. Marcações e código anterior serão limpos. Confira e guarde uma cópia do trabalho atual antes de continuar.")) return;
+  const valor = copiaSelecionada.valor;
+  S = Object.assign(ESTADO_ZERO(), valor, {
+    cesta:valor.cesta.map(i => ({ ...i, pego:false, faltou:false })),
+    codigo:null, receita:null, corredorAtual:null, ajuste:null,
+    busca:"", buscaMerc:"", abreBusca:false, abreLista:false,
+    modo:"casa", tipoRec:"todos", aba:"carrinho", montada:valor.cesta.length > 0
+  });
+  estadoPendente = true;
+  salvarAgora();
+  limparCopia();
+  ir(S.cesta.length ? "#/casa/cesta" : "#/casa/plano");
+});
 
 /* ── preço e catálogo ─────────────────────────────────────── */
 function escolher(gid, filtro){
@@ -1591,7 +1849,11 @@ $("#esqueci").addEventListener("click", () => {
   rec.className = "recado";
 });
 $("#sair").addEventListener("click", () => {
-  Armazem.apaga("sessao");
+  if (estadoPendente && !salvarAgora()) return;
+  if (!Armazem.apaga("sessao")){
+    avisoSalvamento("Não foi possível encerrar a sessão local. Tente Sair novamente.", false); return;
+  }
+  avisoSalvamento("");
   USUARIO = null; S = ESTADO_ZERO();
   $("#formEntrar").reset(); $("#formCriar").reset();
   ir("#/entrar", true);
@@ -2192,7 +2454,7 @@ function desenharPagamento(){
     <div class="mini" style="letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--vm)">
       ${S.canal === "totem" ? "Totem de autoatendimento" : "Caixa com operador"}</div>
     <div class="qr">${qr}</div>
-    <div class="cod">${S.codigo}</div>
+    <div class="cod">${esc(S.codigo)}</div>
     <div class="val">${real(t)}</div>
     <div class="mini">${levados.length} produtos · ${un} unidades</div>
     <div class="exp">Válido até ${validade}<br>O código não carrega preço nem dado pessoal.</div>`;
@@ -2215,6 +2477,14 @@ function desenharPagamento(){
     ? "No totem, o cliente encosta o QR no leitor, confere a lista na tela e paga por cartão ou Pix. Sem fila de operador."
     : "No caixa, o operador lê o QR e todos os itens entram de uma vez. Sem bipar produto por produto, sem erro de digitação.";
 }
+$("#reutilizarLista").addEventListener("click", () => {
+  if (!S.cesta.length) return;
+  if (!confirm("Reutilizar esta lista? Os produtos, quantidades e orçamento serão mantidos. As marcações de pego/não encontrado e o código anterior serão limpos.")) return;
+  S.cesta = S.cesta.map(i => ({ ...i, pego:false, faltou:false }));
+  Object.assign(S, { codigo:null, corredorAtual:null, abreBusca:false, abreLista:false,
+                     buscaMerc:"", busca:"", aba:"carrinho", modo:"casa" });
+  salvarAgora(); ir("#/casa/cesta");
+});
 $("#novaCompra").addEventListener("click", () => {
   if (!confirm("Começar uma compra nova? A lista atual será apagada.")) return;
   const perfil = { pessoas:S.pessoas, dias:S.dias, restricoes:S.restricoes, extras:S.extras,
