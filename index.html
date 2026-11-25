@@ -837,8 +837,11 @@ body.com-barra main{padding-bottom:150px}
       </div>
     </details>
     <details class="dobra" id="dobraCopia" style="max-width:560px">
-      <summary>Restaurar uma cópia de lista</summary>
+      <summary>Guardar ou restaurar uma lista</summary>
       <div class="corpo">
+        <p id="copiaAtualAjuda">Guarde uma cópia dos campos e itens atuais desta aba antes de substituir a lista ou começar outra compra. Confira o arquivo baixado; ele não inclui contas nem confirma pagamentos.</p>
+        <button class="btn btn-v" type="button" id="copiarListaAtual" aria-describedby="copiaAtualAjuda">Baixar lista atual</button>
+        <p id="copiaAtualTexto" role="status" aria-live="polite"></p>
         <p id="copiaAjuda">Escolha um arquivo JSON de lista do Pila (até 1 MiB). Confira a prévia antes de confirmar. A restauração mantém produtos, quantidades e perfil, mas inicia uma nova compra sem marcações ou código anterior. Não importa contas nem pagamentos.</p>
         <label for="arquivoCopia">Arquivo da lista</label>
         <input id="arquivoCopia" type="file" accept=".json,application/json" aria-describedby="copiaAjuda">
@@ -1403,6 +1406,7 @@ function lerEstado(){
 }
 function carregarEstado(resultado = lerEstado()){
   limparCopia();
+  $("#copiaAtualTexto").textContent = "";
   clearTimeout(salvaTimer); salvaTimer = null; estadoPendente = false;
   leituraBloqueada = !resultado.ok;
   rawConhecido = resultado.raw; conflitoEstado = false;
@@ -1437,8 +1441,9 @@ $("#copiarListaInvalida").addEventListener("click", () => {
     $("#recuperacaoTexto").textContent = "Não foi possível solicitar a cópia. Os dados não foram alterados.";
   }
 });
-$("#copiarListaDaAba").addEventListener("click", () => {
-  if (!USUARIO || !estadoPendente) return;
+function baixarListaDaAba(status){
+  if (!USUARIO) return;
+  const texto = $(status);
   let url;
   try {
     const { busca, ...resto } = S;
@@ -1448,13 +1453,17 @@ $("#copiarListaDaAba").addEventListener("click", () => {
     link.href = url; link.download = "pila-lista-desta-aba.json"; link.hidden = true;
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    $("#recuperacaoTexto").textContent = "Download da lista desta aba solicitado. Confira o arquivo antes de recarregar ou fechar. A lista salva não foi alterada. Não há importação automática.";
+    texto.textContent = "Download da lista desta aba solicitado. Confira o arquivo antes de recarregar ou fechar. A lista salva não foi alterada. Não há importação automática.";
   } catch (e) {
     if (url) URL.revokeObjectURL(url);
-    $("#recuperacaoTexto").textContent = "Não foi possível solicitar a lista desta aba. Mantenha a aba aberta e tente novamente; os dados não foram alterados.";
+    texto.textContent = "Não foi possível solicitar a lista desta aba. Mantenha a aba aberta e tente novamente; os dados não foram alterados.";
   }
   medirTopo();
+}
+$("#copiarListaDaAba").addEventListener("click", () => {
+  if (estadoPendente) baixarListaDaAba("#recuperacaoTexto");
 });
+$("#copiarListaAtual").addEventListener("click", () => baixarListaDaAba("#copiaAtualTexto"));
 $("#usarListaTemporaria").addEventListener("click", () => {
   if (!USUARIO || !leituraBloqueada || typeof rawInvalido !== "string") return;
   const esperado = rawInvalido;

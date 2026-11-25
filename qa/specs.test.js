@@ -314,9 +314,9 @@ scenario('estado parcial valido recebe defaults sem descartar metadados existent
 });
 
 
-async function downloadedFile(p,button,message){
+async function downloadedFile(p,button,message,status='#recuperacaoTexto'){
  const before=new Set(await readdir(p.downloadDir));let file;
- await p.click(button);await p.waitText('#recuperacaoTexto',message);
+ await p.click(button);await p.waitText(status,message);
  await p.driver.wait(async()=>{
   for(const name of await readdir(p.downloadDir)){
    if(before.has(name)||!name.endsWith('.json'))continue;
@@ -498,4 +498,31 @@ scenario('leitura de arquivo falha sem trocar lista e nova selecao recupera prev
 scenario('arquivo antigo concluido depois de cancelar nao substitui a nova selecao',async p=>{
  await guest(p);await basket(p);const before=await savedGuestBasket(p),old={...before,pessoas:3},current={...before,pessoas:4};await p.driver.executeScript('const original=File.prototype.text;File.prototype.text=function(){const text=original.call(this);return this.name.startsWith("slow-")?new Promise(resolve=>{window.__qaReleaseCopy=()=>resolve(text)}):text}');
  await chooseCopy(p,JSON.stringify(old),'slow');await p.waitText('#restauracaoTexto','Lendo a cópia local');await centeredClick(p,'#cancelarCopia');await chooseCopy(p,JSON.stringify(current));await p.waitText('#restauracaoTexto','Cópia válida');await p.driver.executeScript('window.__qaReleaseCopy()');await p.waitText('#resumoCopia','4 pessoas');assert.deepEqual(await savedGuestBasket(p),before);await acceptCopy(p);await p.element('#catalogo');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),restoredCopy(current));
+});
+
+async function downloadedCurrent(p,state){
+ await openCopy(p);const file=await downloadedFile(p,'#copiarListaAtual','Download da lista desta aba solicitado','#copiaAtualTexto');
+ assert.deepEqual(JSON.parse(await readFile(file,'utf8')),state);return file;
+}
+scenario('baixa lista saudavel e restaura copia real sem provocar falha de armazenamento',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),file=await downloadedCurrent(p,before),raw=await guestRaw(p);assert.match(file,/pila-lista-desta-aba\.json$/);assert.equal(await p.driver.executeScript('return document.getElementById("salvamentoAviso").hidden'),true);assert.equal(await localSession(p),'visitante');
+ await p.click('#trilhaWrap [data-rota="#/casa/cesta"]');await p.element('#catalogo');await centeredClick(p,'#catalogo [data-mais="banana"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='banana').qtd===before.cesta.find(i=>i.g==='banana').qtd+1,5000);assert.notEqual(await guestRaw(p),raw);await chooseCopyFile(p,file);await p.waitText('#restauracaoTexto','Cópia válida');await acceptCopy(p);await p.element('#catalogo');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),restoredCopy(before));assert.deepEqual(JSON.parse(await readFile(file,'utf8')),before);
+ await p.driver.navigate().refresh();await p.element('#catalogo');assert.deepEqual(await savedGuestBasket(p),restoredCopy(before));
+});
+scenario('copia inicial vazia nao cria estado salvo e pode ser restaurada explicitamente',async p=>{
+ await guest(p);const raw=await guestRaw(p),session=await localSession(p);await openCopy(p);const file=await downloadedFile(p,'#copiarListaAtual','Download da lista desta aba solicitado','#copiaAtualTexto'),copy=JSON.parse(await readFile(file,'utf8'));
+ assert.equal(copy.pessoas,2);assert.equal(copy.dias,15);assert.equal(copy.orcamento,null);assert.deepEqual(copy.cesta,[]);assert.equal(Object.hasOwn(copy,'busca'),false);assert.equal(await guestRaw(p),raw);assert.equal(await localSession(p),session);assert.equal(await p.driver.executeScript('return document.getElementById("salvamentoAviso").hidden'),true);
+ await chooseCopyFile(p,file);await p.waitText('#restauracaoTexto','Cópia válida');await p.waitText('#resumoCopia','0 produtos');await acceptCopy(p);await p.element('#orc');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),restoredCopy(copy));assert.match(await p.driver.getCurrentUrl(),/#\/casa\/plano$/);
+});
+scenario('baixar lista atual conserva previa de outro arquivo e exporta somente trabalho atual',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p),candidate={...before,pessoas:4,cesta:incrementedBasket(before,'banana')};await chooseCopy(p,JSON.stringify(candidate));await p.waitText('#restauracaoTexto','Cópia válida');const summary=await p.text('#resumoCopia'),items=await p.text('#itensCopia'),file=await downloadedCurrent(p,before);
+ assert.equal(await p.text('#resumoCopia'),summary);assert.equal(await p.text('#itensCopia'),items);assert.equal(await (await p.element('#confirmarCopia')).isEnabled(),true);assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await localSession(p),'visitante');await acceptCopy(p);await p.element('#catalogo');await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),restoredCopy(candidate));assert.deepEqual(JSON.parse(await readFile(file,'utf8')),before);
+});
+scenario('baixa lista saudavel da conta sem cadastro sessao ou alteracao do visitante',async p=>{
+ await guest(p);await basket(p);const visitor=await savedGuestBasket(p);await p.click('#sair');await p.element('#formEntrar');await register(p);const accounts=await localAccounts(p),id=accounts[0].id;await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await storedState(p,id))?.cesta?.length,5000);const before=await storedState(p,id),file=await downloadedCurrent(p,before),text=await readFile(file,'utf8');
+ assert.deepEqual(JSON.parse(text),before);for(const secret of ['SenhaQA123!','qa@example.test',id])assert.equal(text.includes(secret),false);assert.equal(Object.hasOwn(JSON.parse(text),'busca'),false);assert.deepEqual(await storedState(p,id),before);assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);assert.equal(await localSession(p),id);
+});
+scenario('falha ao baixar lista saudavel permite retry e nao cria pendencia de salvamento',async p=>{
+ await guest(p);await basket(p);const before=await savedGuestBasket(p);await openCopy(p);const files=await readdir(p.downloadDir);await p.driver.executeScript('window.__qaCurrentURL=URL.createObjectURL;URL.createObjectURL=()=>{throw new Error("QA download indisponível")}');await centeredClick(p,'#copiarListaAtual');await p.waitText('#copiaAtualTexto','Não foi possível solicitar a lista desta aba');assert.deepEqual(await readdir(p.downloadDir),files);assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await p.driver.executeScript('return document.getElementById("salvamentoAviso").hidden'),true);
+ await p.driver.executeScript('URL.createObjectURL=window.__qaCurrentURL');const file=await downloadedCurrent(p,before);assert.deepEqual(JSON.parse(await readFile(file,'utf8')),before);assert.deepEqual(await savedGuestBasket(p),before);await p.click('#sair');await p.element('#formEntrar');assert.equal(await localSession(p),null);assert.deepEqual(await savedGuestBasket(p),before);
 });
