@@ -635,6 +635,7 @@ body.com-barra main{padding-bottom:150px}
   <div class="wrap" id="salvamentoAviso" role="alert" hidden>
     <p id="salvamentoTexto"></p><button type="button" id="salvarNovamente">Tentar salvar lista</button>
     <button type="button" id="lerNovamente" hidden>Tentar ler lista</button>
+    <button type="button" id="copiarListaDaAba" hidden>Baixar lista desta aba</button>
     <button type="button" id="copiarListaInvalida" hidden>Baixar cópia local</button>
     <button type="button" id="usarListaTemporaria" hidden>Usar lista temporária</button>
     <p id="recuperacaoTexto" role="status" aria-live="polite"></p>
@@ -1296,6 +1297,7 @@ function avisoSalvamento(texto, repetir = true){
   $("#salvarNovamente").hidden = !repetir;
   $("#lerNovamente").hidden = true;
   $("#lerNovamente").textContent = "Tentar ler lista";
+  $("#copiarListaDaAba").hidden = !texto || !USUARIO || !estadoPendente;
   $("#copiarListaInvalida").hidden = true;
   $("#usarListaTemporaria").hidden = true;
   if (!texto) $("#recuperacaoTexto").textContent = "";
@@ -1417,6 +1419,24 @@ $("#copiarListaInvalida").addEventListener("click", () => {
     if (url) URL.revokeObjectURL(url);
     $("#recuperacaoTexto").textContent = "Não foi possível solicitar a cópia. Os dados não foram alterados.";
   }
+});
+$("#copiarListaDaAba").addEventListener("click", () => {
+  if (!USUARIO || !estadoPendente) return;
+  let url;
+  try {
+    const { busca, ...resto } = S;
+    const raw = JSON.stringify(resto, null, 2);
+    url = URL.createObjectURL(new Blob([raw], { type:"application/json;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "pila-lista-desta-aba.json"; link.hidden = true;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $("#recuperacaoTexto").textContent = "Download da lista desta aba solicitado. Confira o arquivo antes de recarregar ou fechar. A lista salva não foi alterada. Não há importação automática.";
+  } catch (e) {
+    if (url) URL.revokeObjectURL(url);
+    $("#recuperacaoTexto").textContent = "Não foi possível solicitar a lista desta aba. Mantenha a aba aberta e tente novamente; os dados não foram alterados.";
+  }
+  medirTopo();
 });
 $("#usarListaTemporaria").addEventListener("click", () => {
   if (!USUARIO || !leituraBloqueada || typeof rawInvalido !== "string") return;
