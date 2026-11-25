@@ -209,7 +209,7 @@ scenario('reutiliza lista editada preservando itens perfil valores e liberando n
  await p.click('#troca [data-modo="mercado"]');await p.waitText('#mercPegos','0 de '+before.cesta.length+' itens');await p.waitText('#mercValor','R$ 0,00');
  assert.equal((await savedGuestBasket(p)).cesta.filter(i=>i.pego||i.faltou).length,0);
  await p.click('#bSeguir');await p.waitText('#bilhete','Você ainda não marcou nenhum item');assert.equal((await savedGuestBasket(p)).codigo,null);
- await p.click('#v-pagar [data-rota="#/mercado/rota"]');await p.click('.corredor-atual [data-pega="banana"]');await p.click('#bSeguir');await p.element('#bilhete .cod');
+ await p.click('#v-pagar [data-rota="#/mercado/rota"]');await centeredClick(p,'.corredor-atual [data-pega="banana"]');await p.click('#bSeguir');await p.element('#bilhete .cod');
  await p.driver.wait(async()=>!!(await savedGuestBasket(p))?.codigo,5000);assert.match((await savedGuestBasket(p)).codigo,/^PLA-[A-Z2-9]{4}-\d{4}$/);assert.equal((await savedGuestBasket(p)).cesta.filter(i=>i.pego).length,1);
 });
 scenario('cancelar reutilizacao preserva codigo marcacoes e todos os dados da compra',async p=>{
