@@ -314,17 +314,21 @@ scenario('estado parcial valido recebe defaults sem descartar metadados existent
 });
 
 
-async function downloadedInvalidCopy(p,raw,button='#copiarListaInvalida',message='Download solicitado'){
+async function downloadedFile(p,button,message){
  const before=new Set(await readdir(p.downloadDir));let file;
  await p.click(button);await p.waitText('#recuperacaoTexto',message);
  await p.driver.wait(async()=>{
   for(const name of await readdir(p.downloadDir)){
    if(before.has(name)||!name.endsWith('.json'))continue;
    const path=join(p.downloadDir,name);
-   try{if(await readFile(path,'utf8')===raw){file=path;return true;}}catch{}
+   try{await readFile(path,'utf8');file=path;return true;}catch{}
   }
   return false;
- },10000,'arquivo concluído pelo Chrome com conteúdo original');return file;
+ },10000,'arquivo JSON concluído pelo Chrome');return file;
+}
+async function downloadedInvalidCopy(p,raw){
+ const file=await downloadedFile(p,'#copiarListaInvalida','Download solicitado');
+ assert.equal(await readFile(file,'utf8'),raw);return file;
 }
 async function replaceTemporary(p){await p.click('#usarListaTemporaria');await p.alert(/dados anteriores serão descartados/);}
 scenario('copia conteudo invalido real e substitui somente com confirmacao preservando trabalho',async p=>{
@@ -396,7 +400,10 @@ scenario('falha de conferencia antes de gravar nao descarta dados e retry detect
  await p.click('#lerNovamente');await p.alert(/alterações temporárias/);await savedNoticeHidden(p);assert.deepEqual(await savedGuestBasket(p),external);
 });
 
-const downloadedDraft=(p,state)=>downloadedInvalidCopy(p,JSON.stringify(state,null,2),'#copiarListaDaAba','Download da lista desta aba solicitado');
+async function downloadedDraft(p,state){
+ const file=await downloadedFile(p,'#copiarListaDaAba','Download da lista desta aba solicitado');
+ assert.deepEqual(JSON.parse(await readFile(file,'utf8')),state);return file;
+}
 scenario('copia edicao em conflito antes de recarregar sem substituir escrita da outra aba',async p=>{
  await guest(p);await basket(p);const before=await savedGuestBasket(p),a=await p.driver.getWindowHandle();await secondGuestTab(p);
  await centeredClick(p,'#catalogo [data-mais="tomate"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).cesta.find(i=>i.g==='tomate').qtd===before.cesta.find(i=>i.g==='tomate').qtd+1,5000);const external=await savedGuestBasket(p);
