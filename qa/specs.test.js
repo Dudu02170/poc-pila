@@ -526,3 +526,24 @@ scenario('falha ao baixar lista saudavel permite retry e nao cria pendencia de s
  await guest(p);await basket(p);const before=await savedGuestBasket(p);await openCopy(p);const files=await readdir(p.downloadDir);await p.driver.executeScript('window.__qaCurrentURL=URL.createObjectURL;URL.createObjectURL=()=>{throw new Error("QA download indisponível")}');await centeredClick(p,'#copiarListaAtual');await p.waitText('#copiaAtualTexto','Não foi possível solicitar a lista desta aba');assert.deepEqual(await readdir(p.downloadDir),files);assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await p.driver.executeScript('return document.getElementById("salvamentoAviso").hidden'),true);
  await p.driver.executeScript('URL.createObjectURL=window.__qaCurrentURL');const file=await downloadedCurrent(p,before);assert.deepEqual(JSON.parse(await readFile(file,'utf8')),before);assert.deepEqual(await savedGuestBasket(p),before);await p.click('#sair');await p.element('#formEntrar');assert.equal(await localSession(p),null);assert.deepEqual(await savedGuestBasket(p),before);
 });
+
+async function literalPaymentCode(p,expected){
+ await p.element('#bilhete .cod');await afterDebounce(p);
+ const rendered=await p.driver.executeScript('const code=document.querySelector("#bilhete .cod");return {text:code.textContent,elements:code.childElementCount,executed:window.qaCodigoExecutado===true}');
+ assert.deepEqual(rendered,{text:expected,elements:0,executed:false});
+}
+scenario('codigo salvo com marcacao aparece como texto sem criar elementos ou executar evento',async p=>{
+ const {before}=await shoppingForReuse(p),code='<svg onload="window.qaCodigoExecutado=true"></svg><b>QA & "texto"</b>',expected={...before,codigo:code};
+ const raw=JSON.stringify(expected);await p.driver.executeScript('localStorage.setItem("pila.estado.visitante",arguments[0])',raw);await p.driver.navigate().refresh();await literalPaymentCode(p,code);assert.equal(await guestRaw(p),raw);assert.equal(await localSession(p),'visitante');assert.equal(await p.driver.executeScript('return document.getElementById("salvamentoAviso").hidden'),true);
+ await p.click('#v-pagar [data-guarda="canal"] [data-v="caixa"]');await p.driver.wait(async()=>(await savedGuestBasket(p)).canal==='caixa',5000);await literalPaymentCode(p,code);assert.deepEqual(await savedGuestBasket(p),{...expected,canal:'caixa'});
+});
+scenario('codigo legado da conta preserva caracteres literais sem alterar visitante ou cadastro',async p=>{
+ await guest(p);await basket(p);const visitor=await savedGuestBasket(p);await p.click('#sair');await p.element('#formEntrar');await register(p);const accounts=await localAccounts(p),id=accounts[0].id;
+ await p.click('[data-guarda="orcAtalho"] [data-v="1300"]');await p.click('#btMontar');await p.element('#catalogo');await p.driver.wait(async()=>!!(await storedState(p,id))?.cesta?.length,5000);await p.click('#troca [data-modo="mercado"]');await centeredClick(p,'.corredor-atual [data-pega="banana"]');await p.click('#bSeguir');await p.element('#bilhete .cod');await p.driver.wait(async()=>!!(await storedState(p,id))?.codigo,5000);
+ const before=await storedState(p,id),code='LEGADO-QA & <"código">',expected={...before,codigo:code},raw=JSON.stringify(expected);await p.driver.executeScript('localStorage.setItem(arguments[0],arguments[1])','pila.estado.'+id,raw);await p.driver.navigate().refresh();await literalPaymentCode(p,code);
+ assert.equal(await p.driver.executeScript('return localStorage.getItem(arguments[0])','pila.estado.'+id),raw);assert.deepEqual(await storedState(p,id),expected);assert.deepEqual(await savedGuestBasket(p),visitor);assert.deepEqual(await localAccounts(p),accounts);assert.equal(await localSession(p),id);
+});
+scenario('codigo gerado normalmente continua literal com mesmo QR apos recarga',async p=>{
+ const {before}=await shoppingForReuse(p);assert.match(before.codigo,/^PLA-[A-Z2-9]{4}-\d{4}$/);await literalPaymentCode(p,before.codigo);await p.element('#bilhete .qr svg');const qr=await p.driver.executeScript('return document.querySelector("#bilhete .qr").innerHTML');
+ await p.driver.navigate().refresh();await literalPaymentCode(p,before.codigo);await p.element('#bilhete .qr svg');assert.equal(await p.driver.executeScript('return document.querySelector("#bilhete .qr").innerHTML'),qr);assert.deepEqual(await savedGuestBasket(p),before);assert.equal(await localSession(p),'visitante');
+});

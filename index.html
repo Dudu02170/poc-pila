@@ -2454,7 +2454,7 @@ function desenharPagamento(){
     <div class="mini" style="letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--vm)">
       ${S.canal === "totem" ? "Totem de autoatendimento" : "Caixa com operador"}</div>
     <div class="qr">${qr}</div>
-    <div class="cod">${S.codigo}</div>
+    <div class="cod">${esc(S.codigo)}</div>
     <div class="val">${real(t)}</div>
     <div class="mini">${levados.length} produtos · ${un} unidades</div>
     <div class="exp">Válido até ${validade}<br>O código não carrega preço nem dado pessoal.</div>`;

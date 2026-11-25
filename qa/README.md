@@ -38,3 +38,6 @@ Total vigente: 61 Selenium (46 anteriores + quinze novos). Usa input file real, 
 
 ## Guardar uma lista sem falha de armazenamento
 Total vigente: 66 Selenium (61 anteriores + cinco novos). Baixar lista atual em Orçamento funciona sem pendência/erro, reutilizando o exportador da lista em memória. Testes cobrem cópia/restauração de arquivo real após outra edição; cópia vazia sem criar estado salvo e restauração explícita; preservação de prévia selecionada diferente da lista atual; conta sem incluir cadastro/sessão ou alterar visitante; falha de URL/retry sem pendência falsa. Comparação integral do JSON, Storage e Chrome reais de QA. Somente erro de URL é injetado no cenário negativo; não simula downloads bem-sucedidos. Critérios/limites em KNOWN_ISSUES.md e resultados no PR #2/Actions.
+
+## Código da compra exibido como texto
+Total vigente: 69 Selenium (66 anteriores + três regressões de QA-PILA-005). Exercita texto persistido com marcação/evento benigno sem criar elementos/executar marcador; caracteres literais da conta com isolamento; código normal com QR/estado iguais após recarga. UI, storage e QR locais reais; não simula renderização nem valida pagamento externo. Critérios e limites em KNOWN_ISSUES.md; resultado final no PR #2/Actions.
